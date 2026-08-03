@@ -1,0 +1,11 @@
+# Windows Explorer metadata
+desktop.ini
+
+# Local diagnostics and release artifacts
+*.log
+*.zip
+
+# Temporary and editor backup files
+*.tmp
+*.bak
+*~

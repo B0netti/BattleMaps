@@ -1,0 +1,5 @@
+<Bindings>
+    <Binding name="BATTLEMAPS_TOGGLE" header="BATTLEMAPS" category="ADDONS">
+        BattleMaps_ToggleMap()
+    </Binding>
+</Bindings>
