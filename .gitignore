@@ -1,6 +1,10 @@
 # Windows Explorer metadata
 desktop.ini
 
+# Local development guidance and working status
+AGENTS.md
+PROJECT_STATUS.md
+
 # Local diagnostics and release artifacts
 *.log
 *.zip
