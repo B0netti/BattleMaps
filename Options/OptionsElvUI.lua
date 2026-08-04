@@ -6,6 +6,7 @@ local W = Options.Widgets
 local MakePanel = W.MakePanel
 local MakeCheckbox = W.MakeCheckbox
 local AddControlTooltip = W.AddControlTooltip
+local SetControlEnabled = W.SetControlEnabled
 
 local function ApplyElvUIBGLayout()
     if BattleMaps.ApplyElvUIBGLayout then
@@ -86,9 +87,8 @@ local function AddElvUIOptions(self)
             status:SetTextColor(0.85, 0.45, 0.35)
         end
 
-        if self.elvuiMovePlayerAurasCheck and self.elvuiMovePlayerAurasCheck.SetEnabled then
-            self.elvuiMovePlayerAurasCheck:SetEnabled(available and enabled)
-        end
+        SetControlEnabled(self.elvuiBGLayoutCheck, available)
+        SetControlEnabled(self.elvuiMovePlayerAurasCheck, available and enabled)
     end
     Options.refreshers[#Options.refreshers + 1] = refresher
 end

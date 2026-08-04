@@ -8,11 +8,14 @@ local MakeCheckbox = W.MakeCheckbox
 local AddControlTooltip = W.AddControlTooltip
 local MakeDropdown = W.MakeDropdown
 local MakeSlider = W.MakeSlider
+local MakeColorSwatchControl = W.MakeColorSwatchControl
 local SetControlEnabled = W.SetControlEnabled
 local BORDER_STYLE_OPTIONS = Options.Constants.BORDER_STYLE_OPTIONS
 
 function Options:CreateGeneralPage(parent)
     local db = BattleMaps.Database:Get()
+    local showDeveloperMapControls = db.developerOptions == true
+    local appearanceHeight = showDeveloperMapControls and 334 or 238
     local page = CreateFrame("Frame", nil, parent)
     self.pages.general = page
     page:SetAllPoints(parent)
@@ -43,7 +46,7 @@ function Options:CreateGeneralPage(parent)
     AddControlTooltip(minimapButtonCheck, "Minimap button",
         "Shows the standard BattleMaps LibDBIcon launcher around the minimap. Left-click opens BattleMaps options. Drag the button to reposition it.")
 
-    local fullMap = MakePanel(page, "Full-screen map", 350, -310, 334, 156)
+    local fullMap = MakePanel(page, "Full-screen map", 350, -(appearanceHeight + 24), 334, 156)
     self.worldMapIntegrationCheck = MakeCheckbox(fullMap, "Enable BattleMaps on the full-screen map", 10, -34,
         function() return db.enableWorldMapIntegration ~= false end,
         function(value)
@@ -77,7 +80,7 @@ function Options:CreateGeneralPage(parent)
     end
     self.refreshers[#self.refreshers + 1] = fullMap
 
-    local appearance = MakePanel(page, "Map appearance", 350, -8, 334, 286)
+    local appearance = MakePanel(page, "Map appearance", 350, -8, 334, appearanceHeight)
     self.factionSwapAlertCheck = MakeCheckbox(appearance, "Faction swap alert", 10, -30,
         function() return db.factionSwapAlert ~= false end,
         function(value)
@@ -95,14 +98,15 @@ function Options:CreateGeneralPage(parent)
             BattleMaps.MapFrame:UpdateChromeFade(0, true)
         end)
 
-    self.borderStyleDropdown = MakeDropdown(appearance, "Border style", 12, -84, 152, BORDER_STYLE_OPTIONS,
+    self.borderStyleDropdown = MakeDropdown(appearance, "Border style", 12, -84, 250, BORDER_STYLE_OPTIONS,
         function() return db.frameBorderStyle or "solid" end,
         function(value)
             db.frameBorderStyle = value == "tooltip" and "tooltip"
                 or value == "dialog" and "dialog"
                 or "solid"
             BattleMaps.MapFrame:ApplyVisualSettings()
-        end)
+        end,
+        true)
 
     MakeSlider(appearance, "Border thickness", 12, -132, 0, 8, 1,
         function() return tonumber(db.frameBorderSize) or 2 end,
@@ -120,13 +124,39 @@ function Options:CreateGeneralPage(parent)
         end,
         function(value) return string.format("%d%%", math.floor((value * 100) + 0.5)) end)
 
-    MakeSlider(appearance, "Map texture opacity", 12, -228, 0.20, 1.00, 0.05,
-        function() return tonumber(db.mapTextureAlpha) or 1 end,
-        function(value)
-            db.mapTextureAlpha = value
-            BattleMaps.MapFrame:ApplyVisualSettings()
-        end,
-        function(value) return string.format("%d%%", math.floor((value * 100) + 0.5)) end)
+    if showDeveloperMapControls then
+        self.mapTextureAlphaSlider = MakeSlider(
+            appearance,
+            "Map texture opacity",
+            12,
+            -228,
+            0.20,
+            1.00,
+            0.05,
+            function() return tonumber(db.mapTextureAlpha) or 1 end,
+            function(value)
+                db.mapTextureAlpha = value
+                BattleMaps.MapFrame:ApplyVisualSettings()
+            end,
+            function(value) return string.format("%d%%", math.floor((value * 100) + 0.5)) end
+        )
+
+        self.frameBackgroundColorControl = MakeColorSwatchControl(
+            appearance,
+            "Frame background",
+            12,
+            -276,
+            function()
+                local color = db.frameBackgroundColor
+                return type(color) == "table" and color
+                    or { r = 0.015, g = 0.015, b = 0.015, a = 0.12 }
+            end,
+            function() self:OpenFrameBackgroundColorPicker() end,
+            304
+        )
+        AddControlTooltip(self.frameBackgroundColorControl, "Frame background",
+            "Sets the color behind the map artwork. The color picker's opacity control changes the background opacity independently of Map texture opacity.")
+    end
 end
 
 if Options.RegisterPage then

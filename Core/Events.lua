@@ -161,19 +161,6 @@ Events:SetScript("OnEvent", function(_, event, ...)
         end
     elseif event == "UPDATE_BATTLEFIELD_SCORE" then
         BattleMaps.MapFrame:UpdateBorder()
-
-        -- Blitz and mercenary-style assignments may change the player's effective
-        -- faction after the map first appears. Rebuild only when the selected
-        -- faction-colour mode actually needs updating.
-        local db = BattleMaps.Database:Get()
-        local faction = BattleMaps.MapFrame:GetEffectiveFaction()
-        if (db.useCustomPlayerArrow or db.showPlayerRadius)
-            and db.playerArrowColorMode == "faction"
-            and BattleMaps.Pins.lastPlayerFaction ~= faction
-            and BattleMaps.MapFrame.frame
-            and BattleMaps.MapFrame.frame:IsShown() then
-            BattleMaps.Pins:RefreshGroup()
-        end
     elseif event == "PLAYER_REGEN_ENABLED" then
         -- Repair any restricted unit renderer update that was deferred while
         -- combat lockdown was active. This is harmless when the map is hidden.

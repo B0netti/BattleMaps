@@ -8,7 +8,7 @@ local AddControlTooltip = W.AddControlTooltip
 local MakeResetIconButton = W.MakeResetIconButton
 local MakePanel = W.MakePanel
 local MakeSlider = W.MakeSlider
-local MakeChoiceSelector = W.MakeChoiceSelector
+local MakeDropdown = W.MakeDropdown
 
 function Options:CreateFlagsPage(parent)
     local db = BattleMaps.Database:Get()
@@ -83,8 +83,15 @@ function Options:CreateFlagsPage(parent)
     AddControlTooltip(self.carriedObjectiveSlider, "Carried flags",
         "Scales carried-objective pins such as CTF flags, the Eye of the Storm flag, and Kotmogu orbs when they are represented as carried objectives.")
 
-    local trail = MakePanel(page, "Flag trail", 0, -124, 684, 214)
-    self.flagTrailCheck = MakeCheckbox(trail, "Show flag trail", 12, -28,
+    local columnLeftX = 10
+    local columnCenterX = 210
+    local columnRightX = 500
+    local columnLeftWidth = 180
+    local columnCenterWidth = 250
+    local columnRightWidth = 160
+
+    local trail = MakePanel(page, "Flag trail", 0, -124, 684, 160)
+    self.flagTrailCheck = MakeCheckbox(trail, "Show flag trail", columnLeftX, -30,
         function() return self:GetFlagsTarget().showFlagCarrierTrail end,
         function(value)
             self:GetFlagsTarget().showFlagCarrierTrail = value
@@ -94,33 +101,12 @@ function Options:CreateFlagsPage(parent)
     AddControlTooltip(self.flagTrailCheck, "Flag trail",
         "Shows an objective-coloured trail behind carried battleground objectives. Rendering is throttled and resampled to reduce map-update cost.")
 
-    self.flagTrailDurationSlider = MakeSlider(trail, "Length", 190, -22, 1.00, 30.00, 0.25,
-        function() return tonumber(self:GetFlagsTarget().carriedTrailDuration) or 20.00 end,
-        function(value)
-            self:GetFlagsTarget().carriedTrailDuration = value
-            RefreshFlagPreview()
-        end,
-        function(value) return string.format("%.2fs", value) end,
-        214)
-    AddControlTooltip(self.flagTrailDurationSlider, "Trail length",
-        "Controls how many seconds of movement history remain visible. Long durations are resampled into the selected points-per-carrier detail budget rather than creating unbounded frames. Spawn tether does not use this setting.")
-
-    self.flagTrailSizeSlider = MakeSlider(trail, "Trail size", 432, -22, 0.20, 3.00, 0.05,
-        function() return tonumber(self:GetFlagsTarget().carriedTrailDotScale) or 1.25 end,
-        function(value)
-            self:GetFlagsTarget().carriedTrailDotScale = value
-            RefreshFlagPreview()
-        end,
-        function(value) return string.format("%.2fx", value) end,
-        214)
-    AddControlTooltip(self.flagTrailSizeSlider, "Trail size",
-        "Scales breadcrumb markers, Glow wake thickness, and Spawn tether thickness. The range extends to 3.00x for substantially stronger map visibility.")
-
-    self.flagTrailStyleSelector = MakeChoiceSelector(
+    self.flagTrailStyleSelector = MakeDropdown(
         trail,
-        "Style",
-        12,
-        -76,
+        "Trail style",
+        columnCenterX,
+        -30,
+        columnCenterWidth,
         {
             { value = "breadcrumbs", label = "Breadcrumbs" },
             { value = "glow", label = "Glow wake" },
@@ -136,33 +122,55 @@ function Options:CreateFlagsPage(parent)
             self:GetFlagsTarget().carriedTrailStyle = value
             RefreshFlagPreview(true)
         end,
-        204
+        true
     )
     AddControlTooltip(self.flagTrailStyleSelector, "Trail style",
         "Breadcrumbs uses distinct objective-coloured markers. Glow wake uses a tapered objective-coloured line. Spawn tether draws a direct line from a carried objective to its fixed spawn location on supported maps, including Kotmogu, Warsong Gulch, Twin Peaks, and Eye of the Storm.")
 
-    self.flagTrailDetailSlider = MakeSlider(trail, "Points per carrier", 12, -132, 4, 24, 1,
+    self.flagTrailSizeSlider = MakeSlider(trail, "Trail size", columnRightX, -30, 0.20, 3.00, 0.05,
+        function() return tonumber(self:GetFlagsTarget().carriedTrailDotScale) or 1.25 end,
+        function(value)
+            self:GetFlagsTarget().carriedTrailDotScale = value
+            RefreshFlagPreview()
+        end,
+        function(value) return string.format("%.2fx", value) end,
+        columnRightWidth)
+    AddControlTooltip(self.flagTrailSizeSlider, "Trail size",
+        "Scales breadcrumb markers, Glow wake thickness, and Spawn tether thickness. The range extends to 3.00x for substantially stronger map visibility.")
+
+    self.flagTrailDurationSlider = MakeSlider(trail, "Length", columnLeftX, -84, 1.00, 30.00, 0.25,
+        function() return tonumber(self:GetFlagsTarget().carriedTrailDuration) or 20.00 end,
+        function(value)
+            self:GetFlagsTarget().carriedTrailDuration = value
+            RefreshFlagPreview()
+        end,
+        function(value) return string.format("%.2fs", value) end,
+        columnLeftWidth)
+    AddControlTooltip(self.flagTrailDurationSlider, "Trail length",
+        "Controls how many seconds of movement history remain visible. Long durations are resampled into the selected points-per-carrier detail budget rather than creating unbounded frames. Spawn tether does not use this setting.")
+
+    self.flagTrailDetailSlider = MakeSlider(trail, "Points per carrier", columnCenterX, -84, 4, 24, 1,
         function() return tonumber(self:GetFlagsTarget().carriedTrailDetail) or 16 end,
         function(value)
             self:GetFlagsTarget().carriedTrailDetail = math.floor(value + 0.5)
             RefreshFlagPreview(true)
         end,
         function(value) return string.format("%d", math.floor(value + 0.5)) end,
-        394)
+        columnCenterWidth)
     AddControlTooltip(self.flagTrailDetailSlider, "Points per carrier",
         "Sets the visual budget for each active carried objective. Four Kotmogu carriers can use up to four times this value, with a hard total ceiling of 96 points. Spawn tether uses only two anchor points per carrier.")
 
-    self.kotmoguEnemyFactionColorCheck = MakeCheckbox(trail, "Faction-colour enemy orbs", 432, -140,
+    self.kotmoguEnemyFactionColorCheck = MakeCheckbox(trail, "Faction-color enemy orbs", columnRightX, -88,
         function() return self:GetFlagsTarget().factionColorEnemyKotmoguOrbs ~= false end,
         function(value)
             self:GetFlagsTarget().factionColorEnemyKotmoguOrbs = value
             RefreshFlagPreview()
         end)
-    AddControlTooltip(self.kotmoguEnemyFactionColorCheck, "Faction-colour enemy orbs",
+    AddControlTooltip(self.kotmoguEnemyFactionColorCheck, "Faction-color enemy orbs",
         "In Temple of Kotmogu, friendly carried orbs retain their original orb colour. Enemy carried orbs are desaturated and tinted to the opposing faction colour. Stationary pads remain orb-coloured.")
 
-    local flash = MakePanel(page, "Flag flash", 0, -344, 684, 100)
-    self.flagFlashCheck = MakeCheckbox(flash, "Flash carried flags", 12, -28,
+    local flash = MakePanel(page, "Flag flash", 0, -290, 684, 84)
+    self.flagFlashCheck = MakeCheckbox(flash, "Flash carried flags", columnLeftX, -30,
         function() return self:GetFlagsTarget().flashCarriedObjectives end,
         function(value)
             self:GetFlagsTarget().flashCarriedObjectives = value
@@ -172,23 +180,23 @@ function Options:CreateFlagsPage(parent)
     AddControlTooltip(self.flagFlashCheck, "Flag flash",
         "Adds a brightness flash to carried objective pins so flag carriers are easier to notice without fading the pin itself.")
 
-    self.flagFlashStrengthSlider = MakeSlider(flash, "Strength", 190, -22, 0.10, 1.00, 0.05,
+    self.flagFlashStrengthSlider = MakeSlider(flash, "Strength", columnCenterX, -30, 0.10, 1.00, 0.05,
         function() return tonumber(self:GetFlagsTarget().carriedObjectiveFlashStrength) or 0.40 end,
         function(value)
             self:GetFlagsTarget().carriedObjectiveFlashStrength = value
             RefreshFlagPreview()
         end,
         function(value) return string.format("%.2f", value) end,
-        214)
+        columnCenterWidth)
 
-    self.flagFlashPeriodSlider = MakeSlider(flash, "Period", 432, -22, 0.30, 2.00, 0.05,
+    self.flagFlashPeriodSlider = MakeSlider(flash, "Period", columnRightX, -30, 0.30, 2.00, 0.05,
         function() return tonumber(self:GetFlagsTarget().carriedObjectiveFlashPeriod) or 0.55 end,
         function(value)
             self:GetFlagsTarget().carriedObjectiveFlashPeriod = value
             RefreshFlagPreview()
         end,
         function(value) return string.format("%.2fs", value) end,
-        214)
+        columnRightWidth)
 end
 
 if Options.RegisterPage then

@@ -20,6 +20,12 @@ local MapFrame = {
 }
 BattleMaps.MapFrame = MapFrame
 
+-- Keep the experimental FoV renderer behind the map artwork while leaving
+-- the ordinary objective and unit pin layer above it.
+local FOV_LAYER_LEVEL_OFFSET = 1
+local MAP_CANVAS_LEVEL_OFFSET = 10
+local PIN_LAYER_LEVEL_OFFSET = 20
+
 local function GetTemplate()
     return BackdropTemplateMixin and "BackdropTemplate" or nil
 end
@@ -126,6 +132,14 @@ local function SetBackdrop(frame, borderSize, borderStyle)
     frame:SetBackdrop(backdrop)
     frame:SetBackdropColor(0.03, 0.025, 0.02, 0)
     frame:SetBackdropBorderColor(0.25, 0.20, 0.15, borderSize > 0 and 1 or 0)
+end
+
+local function GetFrameBackgroundColor(db)
+    local color = type(db and db.frameBackgroundColor) == "table" and db.frameBackgroundColor or {}
+    return BattleMaps.Clamp(tonumber(color.r or color[1]) or 0.015, 0, 1),
+        BattleMaps.Clamp(tonumber(color.g or color[2]) or 0.015, 0, 1),
+        BattleMaps.Clamp(tonumber(color.b or color[3]) or 0.015, 0, 1),
+        BattleMaps.Clamp(tonumber(color.a or color[4]) or 0.12, 0, 1)
 end
 
 local function ScoreFactionToName(faction)
@@ -297,12 +311,19 @@ function MapFrame:Create()
     local background = viewport:CreateTexture(nil, "BACKGROUND")
     self.viewportBackground = background
     background:SetAllPoints()
-    background:SetColorTexture(0.015, 0.015, 0.015, 0.12)
+    background:SetColorTexture(GetFrameBackgroundColor(db))
+
+    local fovLayer = CreateFrame("Frame", nil, viewport)
+    self.fovLayer = fovLayer
+    fovLayer:SetAllPoints(viewport)
+    fovLayer:SetFrameLevel(viewport:GetFrameLevel() + FOV_LAYER_LEVEL_OFFSET)
+    fovLayer:EnableMouse(false)
 
     local canvas = CreateFrame("Frame", nil, viewport)
     self.canvas = canvas
     canvas:SetPoint("TOPLEFT", viewport, "TOPLEFT", 0, 0)
     canvas:SetSize(1, 1)
+    canvas:SetFrameLevel(viewport:GetFrameLevel() + MAP_CANVAS_LEVEL_OFFSET)
 
     local emptyText = viewport:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     self.emptyText = emptyText
@@ -314,7 +335,7 @@ function MapFrame:Create()
     local pinLayer = CreateFrame("Frame", nil, viewport)
     self.pinLayer = pinLayer
     pinLayer:SetAllPoints(viewport)
-    pinLayer:SetFrameLevel(viewport:GetFrameLevel() + 20)
+    pinLayer:SetFrameLevel(viewport:GetFrameLevel() + PIN_LAYER_LEVEL_OFFSET)
 
     local editBorder = viewport:CreateTexture(nil, "OVERLAY")
     self.editBorder = editBorder
@@ -493,7 +514,7 @@ end
 function MapFrame:ApplyVisualSettings()
     if not self.frame then return end
     local db = BattleMaps.Database:Get()
-    local mapAlpha = BattleMaps.Clamp(tonumber(db.mapTextureAlpha) or 1, 0.20, 1.00)
+    local backgroundR, backgroundG, backgroundB, backgroundA = GetFrameBackgroundColor(db)
 
     if self.worldMapMode then
         self.visualInset = 0
@@ -509,7 +530,7 @@ function MapFrame:ApplyVisualSettings()
         self:SetChromeInteractive(false)
 
         if self.viewportBackground then
-            self.viewportBackground:SetColorTexture(0.015, 0.015, 0.015, 0.12 * mapAlpha)
+            self.viewportBackground:SetColorTexture(backgroundR, backgroundG, backgroundB, backgroundA)
         end
         if BattleMaps.MapRenderer then BattleMaps.MapRenderer:ApplyTextureAlpha() end
         self:UpdateViewportChromeInset(0, true)
@@ -534,7 +555,7 @@ function MapFrame:ApplyVisualSettings()
     self.hint:SetShown(self.editMode == true)
     self:UpdateBorder()
     if self.viewportBackground then
-        self.viewportBackground:SetColorTexture(0.015, 0.015, 0.015, 0.12 * mapAlpha)
+        self.viewportBackground:SetColorTexture(backgroundR, backgroundG, backgroundB, backgroundA)
     end
     if BattleMaps.MapRenderer then BattleMaps.MapRenderer:ApplyTextureAlpha() end
     self:UpdateViewportChromeInset(tonumber(self.chromeAlpha) or 1, true)
@@ -1557,12 +1578,16 @@ function MapFrame:OnUpdate(elapsed)
         end
     end
 
-    -- Objective texture pulses are lightweight opacity interpolation and need
-    -- frame-rate updates to remain smooth. Keep all provider/pin refresh work
-    -- on the existing 0.10-second throttle below.
+    -- Objective texture pulses and Test Mode player-facing rotations are
+    -- lightweight visual updates that need frame-rate refreshes to remain
+    -- smooth. Keep all provider/pin rebuild work on the 0.10-second throttle.
     if BattleMaps.Pins and self.frame:IsShown()
         and BattleMaps.Pins.UpdateSmoothObjectiveAnimations then
         BattleMaps.Pins:UpdateSmoothObjectiveAnimations()
+    end
+    if BattleMaps.Pins and self.frame:IsShown()
+        and BattleMaps.Pins.UpdateSmoothTestPlayerFacing then
+        BattleMaps.Pins:UpdateSmoothTestPlayerFacing()
     end
 
     self.pinElapsed = (self.pinElapsed or 0) + elapsed

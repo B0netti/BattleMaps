@@ -68,15 +68,15 @@ function Options:CreateNotificationsPage(parent)
     description:SetText("Controls RaidBossEmoteFrame and RaidWarningFrame; disabling restores Blizzard's captured settings.")
 
     local placement = MakePanel(page, "Placement", 0, -176, 684, 170)
-    self.notificationAnchorMode = MakeChoiceSelector(placement, "Position mode", 12, -30, {
+    self.notificationAnchorMode = MakeDropdown(placement, "Position mode", 12, -30, 250, {
         { value = "INDEPENDENT", label = "Screen" },
         { value = "MAP", label = "Attach to map" },
     }, function() return Settings().anchorMode end, function(value)
         Settings().anchorMode = value
         BattleMaps.Notifications:ApplyAndShowGuide()
-    end, 112)
+    end, true)
 
-    self.notificationMapSide = MakeDropdown(placement, "Map attachment", 342, -30, 300, {
+    self.notificationMapSide = MakeDropdown(placement, "Map attachment", 342, -30, 250, {
         { value = "TOP", label = "Top centre" },
         { value = "TOPLEFT", label = "Top left" },
         { value = "TOPRIGHT", label = "Top right" },
@@ -88,7 +88,7 @@ function Options:CreateNotificationsPage(parent)
         -- Reset Position remains available when the defaults are desired.
         Settings().mapAnchorSide = value
         BattleMaps.Notifications:ApplyAndShowGuide()
-    end)
+    end, true)
 
     self.notificationAlignment = MakeChoiceSelector(placement, "Text alignment", 12, -78, {
         { value = "LEFT", label = "Left" },

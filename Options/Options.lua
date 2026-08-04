@@ -349,9 +349,16 @@ function Options:EnsureMapEditMode()
     if not mapFrame.editMode then mapFrame:BeginEdit() end
 end
 
-function Options:ShowColorPickerAboveOptions(settings)
+function Options:ShowColorPickerAboveOptions(settings, preserveDynamicClassContext)
     if not ColorPickerFrame or not ColorPickerFrame.SetupColorPickerAndShow then return end
 
+    if not preserveDynamicClassContext then
+        ColorPickerFrame.BattleMapsDynamicClassColorContext = nil
+        ColorPickerFrame.BattleMapsUseDynamicClassColor = nil
+    end
+    if ColorPickerFrame.BattleMapsDynamicClassButton then
+        ColorPickerFrame.BattleMapsDynamicClassButton:Hide()
+    end
     ColorPickerFrame:SetupColorPickerAndShow(settings)
 
     local function RaisePicker()
@@ -361,6 +368,11 @@ function Options:ShowColorPickerAboveOptions(settings)
         if not picker.BattleMapsLayerRestoreHooked then
             picker.BattleMapsLayerRestoreHooked = true
             picker:HookScript("OnHide", function(frame)
+                frame.BattleMapsDynamicClassColorContext = nil
+                frame.BattleMapsUseDynamicClassColor = nil
+                if frame.BattleMapsDynamicClassButton then
+                    frame.BattleMapsDynamicClassButton:Hide()
+                end
                 if frame.BattleMapsLayerOwner ~= "BattleMaps" then return end
                 frame.BattleMapsLayerOwner = nil
 
@@ -395,71 +407,184 @@ function Options:ShowColorPickerAboveOptions(settings)
     end
 end
 
-function Options:OpenPlayerArrowColorPicker()
-    local db = BattleMaps.Database:Get()
-    local color = type(db.playerArrowCustomColor) == "table" and db.playerArrowCustomColor or {}
+local function GetCurrentPlayerClassColor()
+    if BattleMaps.Pins and BattleMaps.Pins.GetPlayerClassColor then
+        return BattleMaps.Pins:GetPlayerClassColor()
+    end
+
+    local classFile = select(2, UnitClass("player"))
+    local color = classFile and RAID_CLASS_COLORS and RAID_CLASS_COLORS[classFile]
+    if color then return color.r, color.g, color.b end
+    return 1, 1, 1
+end
+
+local function SetDynamicColorPickerRGB(r, g, b)
+    local picker = ColorPickerFrame
+    local colorPicker = picker and picker.Content and picker.Content.ColorPicker
+    if colorPicker and type(colorPicker.SetColorRGB) == "function" then
+        colorPicker:SetColorRGB(r, g, b)
+        local swatch = picker.Content.ColorSwatchCurrent
+        if swatch and type(swatch.SetColorTexture) == "function" then
+            swatch:SetColorTexture(r, g, b)
+        end
+        return true
+    end
+    if picker and type(picker.SetColorRGB) == "function" then
+        picker:SetColorRGB(r, g, b)
+        return true
+    end
+    return false
+end
+
+function Options:GetDynamicColorPickerClassButton()
+    -- ElvUI supplies ColorPPClass. With the unmodified Blizzard picker,
+    -- provide the same action only for BattleMaps colors that support dynamic
+    -- class mode, so the feature behaves consistently with either interface.
+    if _G.ColorPPClass then
+        return _G.ColorPPClass, false
+    end
+
+    local picker = ColorPickerFrame
+    if not picker then return nil, false end
+    if picker.BattleMapsDynamicClassButton then
+        return picker.BattleMapsDynamicClassButton, true
+    end
+
+    local button = CreateFrame(
+        "Button",
+        "BattleMapsDynamicColorPickerClassButton",
+        picker,
+        "UIPanelButtonTemplate"
+    )
+    button:SetSize(104, 22)
+    button:SetText("Class")
+
+    local hexBox = picker.Content and picker.Content.HexBox
+    if hexBox then
+        button:SetPoint("BOTTOM", hexBox, "TOP", 0, 8)
+    else
+        button:SetPoint("BOTTOMRIGHT", picker, "BOTTOMRIGHT", -18, 48)
+    end
+    button:Hide()
+    picker.BattleMapsDynamicClassButton = button
+    return button, true
+end
+
+function Options:ConfigureDynamicColorPickerClassButton()
+    local classButton, battleMapsOwned = self:GetDynamicColorPickerClassButton()
+    if not classButton or type(classButton.HookScript) ~= "function" then return end
+    if battleMapsOwned then
+        classButton:SetFrameLevel(ColorPickerFrame:GetFrameLevel() + 5)
+        classButton:Show()
+    end
+    if classButton.BattleMapsDynamicClassHooked then return end
+    classButton.BattleMapsDynamicClassHooked = true
+
+    -- Mark the Class action before the picker updates its RGB value so the
+    -- shared swatch callback does not turn the choice into a saved snapshot.
+    classButton:HookScript("OnMouseDown", function()
+        local picker = ColorPickerFrame
+        if picker and picker.BattleMapsDynamicClassColorContext then
+            picker.BattleMapsUseDynamicClassColor = true
+        end
+    end)
+    classButton:HookScript("OnClick", function()
+        local picker = ColorPickerFrame
+        local context = picker and picker.BattleMapsDynamicClassColorContext
+        if not context then return end
+
+        picker.BattleMapsUseDynamicClassColor = true
+        local r, g, b = GetCurrentPlayerClassColor()
+        SetDynamicColorPickerRGB(r, g, b)
+
+        context.setMode("class")
+        context.refresh()
+    end)
+end
+
+function Options:OpenDynamicClassColorPicker(context)
+    local previousMode = context.getMode() == "class" and "class" or "custom"
+    local savedColor = context.getColor()
+    local color = type(savedColor) == "table" and savedColor or {}
     local previous = {
         r = BattleMaps.Clamp(tonumber(color.r or color[1]) or 1, 0, 1),
         g = BattleMaps.Clamp(tonumber(color.g or color[2]) or 0.82, 0, 1),
         b = BattleMaps.Clamp(tonumber(color.b or color[3]) or 0.22, 0, 1),
     }
+    local initial = previous
+    if previousMode == "class" then
+        local r, g, b = GetCurrentPlayerClassColor()
+        initial = { r = r, g = g, b = b }
+    end
 
     if not ColorPickerFrame or not ColorPickerFrame.SetupColorPickerAndShow then
-        BattleMaps.Chat("The Blizzard colour picker is unavailable.")
+        context.setMode(previousMode)
+        self:Refresh()
+        BattleMaps.Chat("The Blizzard color picker is unavailable.")
         return
     end
 
+    local pickerContext = {
+        setMode = context.setMode,
+        refresh = context.refresh,
+    }
     local function ApplyColor()
         local r, g, b = ColorPickerFrame:GetColorRGB()
-        db.playerArrowCustomColor = { r = r, g = g, b = b }
-        self:Refresh()
-        if BattleMaps.Pins then BattleMaps.Pins:RefreshGroup() end
+        local classR, classG, classB = GetCurrentPlayerClassColor()
+        local matchesCurrentClass = math.abs(r - classR) < 0.004
+            and math.abs(g - classG) < 0.004
+            and math.abs(b - classB) < 0.004
+        if ColorPickerFrame.BattleMapsUseDynamicClassColor and matchesCurrentClass then
+            context.setMode("class")
+        else
+            ColorPickerFrame.BattleMapsUseDynamicClassColor = nil
+            context.setColor({ r = r, g = g, b = b })
+            context.setMode("custom")
+        end
+        context.refresh()
     end
 
+    ColorPickerFrame.BattleMapsDynamicClassColorContext = pickerContext
+    ColorPickerFrame.BattleMapsUseDynamicClassColor = previousMode == "class"
     self:ShowColorPickerAboveOptions({
-        r = previous.r,
-        g = previous.g,
-        b = previous.b,
+        r = initial.r,
+        g = initial.g,
+        b = initial.b,
         hasOpacity = false,
         swatchFunc = ApplyColor,
         cancelFunc = function()
-            db.playerArrowCustomColor = previous
+            context.setColor(previous)
+            context.setMode(previousMode)
+            context.refresh()
+        end,
+    }, true)
+    ColorPickerFrame.BattleMapsDynamicClassColorContext = pickerContext
+    ColorPickerFrame.BattleMapsUseDynamicClassColor = previousMode == "class"
+    self:ConfigureDynamicColorPickerClassButton()
+end
+
+function Options:OpenPlayerArrowColorPicker()
+    local db = BattleMaps.Database:Get()
+    self:OpenDynamicClassColorPicker({
+        getMode = function() return db.playerArrowColorMode end,
+        setMode = function(mode) db.playerArrowColorMode = mode end,
+        getColor = function() return db.playerArrowCustomColor end,
+        setColor = function(color) db.playerArrowCustomColor = color end,
+        refresh = function()
             self:Refresh()
             if BattleMaps.Pins then BattleMaps.Pins:RefreshGroup() end
         end,
     })
 end
 
-
 function Options:OpenHealerIconColorPicker()
     local target = self:GetUnitsTarget()
-    local color = type(target.healerIconCustomColor) == "table" and target.healerIconCustomColor or {}
-    local previous = {
-        r = BattleMaps.Clamp(tonumber(color.r or color[1]) or 1, 0, 1),
-        g = BattleMaps.Clamp(tonumber(color.g or color[2]) or 1, 0, 1),
-        b = BattleMaps.Clamp(tonumber(color.b or color[3]) or 1, 0, 1),
-    }
-
-    if not ColorPickerFrame or not ColorPickerFrame.SetupColorPickerAndShow then
-        BattleMaps.Chat("The Blizzard colour picker is unavailable.")
-        return
-    end
-
-    local function ApplyColor()
-        local r, g, b = ColorPickerFrame:GetColorRGB()
-        target.healerIconCustomColor = { r = r, g = g, b = b }
-        self:Refresh()
-        if BattleMaps.Pins then BattleMaps.Pins:RefreshGroup() end
-    end
-
-    self:ShowColorPickerAboveOptions({
-        r = previous.r,
-        g = previous.g,
-        b = previous.b,
-        hasOpacity = false,
-        swatchFunc = ApplyColor,
-        cancelFunc = function()
-            target.healerIconCustomColor = previous
+    self:OpenDynamicClassColorPicker({
+        getMode = function() return target.healerIconColorMode end,
+        setMode = function(mode) target.healerIconColorMode = mode end,
+        getColor = function() return target.healerIconCustomColor end,
+        setColor = function(color) target.healerIconCustomColor = color end,
+        refresh = function()
             self:Refresh()
             if BattleMaps.Pins then BattleMaps.Pins:RefreshGroup() end
         end,
@@ -507,40 +632,64 @@ function Options:OpenObjectivePulseColorPicker()
 end
 
 function Options:OpenObjectiveTimerTextColorPicker()
-    local db = self:GetTimerTarget()
-    local color = type(db.objectiveTimerTextColor) == "table" and db.objectiveTimerTextColor or {}
+    local settings = self:GetTimerTarget()
+    self:OpenDynamicClassColorPicker({
+        getMode = function() return settings.objectiveTimerTextColorMode end,
+        setMode = function(mode) settings.objectiveTimerTextColorMode = mode end,
+        getColor = function() return settings.objectiveTimerTextColor end,
+        setColor = function(color) settings.objectiveTimerTextColor = color end,
+        refresh = function()
+            self:Refresh()
+            if BattleMaps.Pins and BattleMaps.Pins.RefreshObjectiveTimerTextSettings then
+                BattleMaps.Pins:RefreshObjectiveTimerTextSettings()
+            end
+        end,
+    })
+end
+
+function Options:OpenFrameBackgroundColorPicker()
+    local db = BattleMaps.Database:Get()
+    local savedColor = type(db.frameBackgroundColor) == "table" and db.frameBackgroundColor or {}
     local previous = {
-        r = BattleMaps.Clamp(tonumber(color.r or color[1]) or 1, 0, 1),
-        g = BattleMaps.Clamp(tonumber(color.g or color[2]) or 1, 0, 1),
-        b = BattleMaps.Clamp(tonumber(color.b or color[3]) or 1, 0, 1),
+        r = BattleMaps.Clamp(tonumber(savedColor.r or savedColor[1]) or 0.015, 0, 1),
+        g = BattleMaps.Clamp(tonumber(savedColor.g or savedColor[2]) or 0.015, 0, 1),
+        b = BattleMaps.Clamp(tonumber(savedColor.b or savedColor[3]) or 0.015, 0, 1),
+        a = BattleMaps.Clamp(tonumber(savedColor.a or savedColor[4]) or 0.12, 0, 1),
     }
 
     if not ColorPickerFrame or not ColorPickerFrame.SetupColorPickerAndShow then
-        BattleMaps.Chat("The Blizzard colour picker is unavailable.")
+        BattleMaps.Chat("The Blizzard color picker is unavailable.")
         return
     end
 
+    local function RefreshBackground()
+        self:Refresh()
+        if BattleMaps.MapFrame then BattleMaps.MapFrame:ApplyVisualSettings() end
+    end
     local function ApplyColor()
         local r, g, b = ColorPickerFrame:GetColorRGB()
-        db.objectiveTimerTextColor = { r = r, g = g, b = b }
-        self:Refresh()
-        if BattleMaps.Pins and BattleMaps.Pins.RefreshObjectiveTimerTextSettings then
-            BattleMaps.Pins:RefreshObjectiveTimerTextSettings()
-        end
+        local a = type(ColorPickerFrame.GetColorAlpha) == "function"
+            and ColorPickerFrame:GetColorAlpha() or previous.a
+        db.frameBackgroundColor = {
+            r = BattleMaps.Clamp(tonumber(r) or previous.r, 0, 1),
+            g = BattleMaps.Clamp(tonumber(g) or previous.g, 0, 1),
+            b = BattleMaps.Clamp(tonumber(b) or previous.b, 0, 1),
+            a = BattleMaps.Clamp(tonumber(a) or previous.a, 0, 1),
+        }
+        RefreshBackground()
     end
 
     self:ShowColorPickerAboveOptions({
         r = previous.r,
         g = previous.g,
         b = previous.b,
-        hasOpacity = false,
+        opacity = previous.a,
+        hasOpacity = true,
         swatchFunc = ApplyColor,
+        opacityFunc = ApplyColor,
         cancelFunc = function()
-            db.objectiveTimerTextColor = previous
-            self:Refresh()
-            if BattleMaps.Pins and BattleMaps.Pins.RefreshObjectiveTimerTextSettings then
-                BattleMaps.Pins:RefreshObjectiveTimerTextSettings()
-            end
+            db.frameBackgroundColor = previous
+            RefreshBackground()
         end,
     })
 end
@@ -1376,8 +1525,22 @@ function Options:Refresh()
     local timerSettings = self:GetTimerTarget()
     local notificationSettings = self:GetNotificationTarget()
     SetControlEnabled(self.combatTeamCheck, true)
-    SetControlEnabled(self.playerColorSelector, db.useCustomPlayerArrow == true)
     local unitsSettings = self:GetUnitsTarget()
+    local playerStyleUsesColor = unitsSettings.playerPinStyle == "arrow"
+        or unitsSettings.playerPinStyle == "team"
+    local playerStyleUsesTeamSize = unitsSettings.playerPinStyle == "team"
+    SetControlEnabled(self.playerColorControl, playerStyleUsesColor)
+    if self.playerArrowSizeSlider then self.playerArrowSizeSlider:SetShown(not playerStyleUsesTeamSize) end
+    if self.playerTeamPinSizeNote then
+        self.playerTeamPinSizeNote:SetShown(playerStyleUsesTeamSize)
+        self.playerTeamPinSizeNote:SetText(string.format(
+            "Team Pin Size\nUses Team Members Size: %d px",
+            tonumber(unitsSettings.teamMemberPinSize) or 12
+        ))
+    end
+    local fovEnabled = unitsSettings.playerFovStyle == "soft" or unitsSettings.playerFovStyle == "waves"
+    SetControlEnabled(self.playerFovScaleSlider, fovEnabled)
+    SetControlEnabled(self.playerFovAlphaSlider, fovEnabled)
     local teamStackingEnabled = unitsSettings.stackTeamPins ~= false
     SetControlEnabled(self.excludePlayerArrowFromStackCheck, teamStackingEnabled)
     SetControlEnabled(self.teamPinStackOverlapSlider, teamStackingEnabled)

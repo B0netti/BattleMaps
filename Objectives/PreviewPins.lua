@@ -735,6 +735,9 @@ function Pins:RefreshDummyPins()
 
     self:EnsureDummyPins()
     self:HideLivePins()
+    if self.SuppressLiveUnitFramesForPreview then
+        self:SuppressLiveUnitFramesForPreview()
+    end
 
     local mapID = BattleMaps.MapFrame.currentMapID
     local mapFrame = BattleMaps.MapFrame
@@ -1070,4 +1073,3 @@ function Pins:RefreshDummyPins()
     self.dummyActive = true
     return true
 end
-

@@ -2,7 +2,7 @@
 ## Title: |cffE3AD68BattleMaps|r
 ## Notes: Tactical BG Maps.
 ## Author: Bonetti
-## Version: 2.6.22
+## Version: 2.6.46
 ## SavedVariables: BattleMapsDB
 ## Category: PvP
 ## Category-deDE: PvP

@@ -7,7 +7,7 @@ local PIN_DEFAULTS = {
     playerArrowSize = 33,
     teamMemberPinSize = 13,
     healerPinSize = 16.5,
-    combatTeamPinScale = 1.00,
+    combatTeamPinScale = 1.00, -- retired setting retained at 1 for SavedVariables compatibility
     objectivePinScale = 2.10,
     objectivePinAlpha = 0.90,
     carrierObjectivePinScale = 0.75,
@@ -16,6 +16,10 @@ local PIN_DEFAULTS = {
 
 local PLAYER_PIN_DEFAULTS = {
     playerArrowSize = PIN_DEFAULTS.playerArrowSize,
+    playerPinStyle = "arrow",
+    playerFovStyle = "none",
+    playerFovScale = 1.00,
+    playerFovAlpha = 0.65,
     teamMemberPinSize = PIN_DEFAULTS.teamMemberPinSize,
     healerPinSize = PIN_DEFAULTS.healerPinSize,
     combatTeamPinScale = PIN_DEFAULTS.combatTeamPinScale,
@@ -26,6 +30,7 @@ local PLAYER_PIN_DEFAULTS = {
     teamPinStackOverlap = 25,
     teamPinStackDirection = "compact",
     showTeamSpecIcons = true,
+    healerIconColorMode = "custom",
     healerIconCustomColor = { r = 1.00, g = 1.00, b = 1.00 },
 }
 
@@ -63,6 +68,7 @@ local TIMER_DEFAULTS = {
     objectiveTimerTextOffsetX = 0,
     objectiveTimerTextOffsetY = 0,
     objectiveTimerTextFont = "Expressway",
+    objectiveTimerTextColorMode = "custom",
     objectiveTimerTextColor = {
         r = 1.00,
         g = 0.988235354423523,
@@ -99,18 +105,19 @@ local ROOT_DEFAULTS = {
     applyFrameSize = true,
     showLoginMessage = true,
     debug = false,
+    developerOptions = false,
     factionSwapAlert = true,
     factionColoredBorder = true, -- legacy alias; kept for older saved variables
     frameBorderSize = 3,
     frameBorderStrength = 1.00,
     frameBorderStyle = "solid",
+    frameBackgroundColor = { r = 0.015, g = 0.015, b = 0.015, a = 0.12 },
     fadeMapHeader = true,
     mapTextureAlpha = 0.90,
     highlightFriendlyHealers = true,
     useCustomHealerIcon = true,
     useCustomTeamPinTextures = true,
     useSolidTeamPinOutOfCombat = true,
-    useCustomPlayerArrow = true,
     showFlagCarrierTrail = true,
     carriedTrailStyle = OBJECTIVE_PIN_DEFAULTS.carriedTrailStyle,
     carriedTrailDuration = OBJECTIVE_PIN_DEFAULTS.carriedTrailDuration,
@@ -137,6 +144,7 @@ local ROOT_DEFAULTS = {
     objectiveTimerTextOffsetX = TIMER_DEFAULTS.objectiveTimerTextOffsetX,
     objectiveTimerTextOffsetY = TIMER_DEFAULTS.objectiveTimerTextOffsetY,
     objectiveTimerTextFont = TIMER_DEFAULTS.objectiveTimerTextFont,
+    objectiveTimerTextColorMode = TIMER_DEFAULTS.objectiveTimerTextColorMode,
     objectiveTimerTextColor = {
         r = TIMER_DEFAULTS.objectiveTimerTextColor.r,
         g = TIMER_DEFAULTS.objectiveTimerTextColor.g,
@@ -163,6 +171,10 @@ local ROOT_DEFAULTS = {
     useGlobalTimerSettings = false,
     useGlobalNotificationSettings = true,
     playerArrowSize = PIN_DEFAULTS.playerArrowSize,
+    playerPinStyle = PLAYER_PIN_DEFAULTS.playerPinStyle,
+    playerFovStyle = PLAYER_PIN_DEFAULTS.playerFovStyle,
+    playerFovScale = PLAYER_PIN_DEFAULTS.playerFovScale,
+    playerFovAlpha = PLAYER_PIN_DEFAULTS.playerFovAlpha,
     teamMemberPinSize = PIN_DEFAULTS.teamMemberPinSize,
     healerPinSize = PIN_DEFAULTS.healerPinSize,
     combatTeamPinScale = PIN_DEFAULTS.combatTeamPinScale,
@@ -173,6 +185,7 @@ local ROOT_DEFAULTS = {
     teamPinStackOverlap = PLAYER_PIN_DEFAULTS.teamPinStackOverlap,
     teamPinStackDirection = "compact",
     showTeamSpecIcons = true,
+    healerIconColorMode = PLAYER_PIN_DEFAULTS.healerIconColorMode,
     healerIconCustomColor = { r = 1.00, g = 1.00, b = 1.00 },
     objectivePinScale = PIN_DEFAULTS.objectivePinScale,
     objectivePinAlpha = PIN_DEFAULTS.objectivePinAlpha,
@@ -399,7 +412,7 @@ local PERSONAL_MAP_DEFAULTS = {
             playerArrowSize = 22,
             teamMemberPinSize = 6,
             healerPinSize = 7,
-            combatTeamPinScale = 1.1,
+            combatTeamPinScale = 1,
             stackTeamPins = true,
             excludePlayerArrowFromStack = false,
             teamPinStackRadius = 18,
@@ -521,7 +534,7 @@ local PERSONAL_MAP_DEFAULTS = {
             playerArrowSize = 22,
             teamMemberPinSize = 12,
             healerPinSize = 16,
-            combatTeamPinScale = 1.25,
+            combatTeamPinScale = 1,
             stackTeamPins = true,
             excludePlayerArrowFromStack = false,
             teamPinStackRadius = 18,
@@ -581,7 +594,7 @@ local PERSONAL_MAP_DEFAULTS = {
             playerArrowSize = 34,
             teamMemberPinSize = 13,
             healerPinSize = 15,
-            combatTeamPinScale = 1.1,
+            combatTeamPinScale = 1,
             stackTeamPins = true,
             excludePlayerArrowFromStack = true,
             teamPinStackRadius = 22,
@@ -701,7 +714,7 @@ local PERSONAL_MAP_DEFAULTS = {
             playerArrowSize = 31,
             teamMemberPinSize = 12,
             healerPinSize = 18.5,
-            combatTeamPinScale = 0.95,
+            combatTeamPinScale = 1,
             stackTeamPins = true,
             excludePlayerArrowFromStack = false,
             teamPinStackRadius = 36,
@@ -881,14 +894,62 @@ local function ResetDefaults(source, destination)
     return destination
 end
 
+local function NormalizePlayerFovSettings(settings)
+    if type(settings) ~= "table" then return end
+
+    -- Migrate the retired checkbox once. An enabled cone becomes the Soft FoV
+    -- style; disabled or absent cones become None. Scale and alpha retain the
+    -- user's previous values under their new FoV setting names.
+    local hasLegacySettings = settings.showPlayerVisionCone ~= nil
+        or settings.playerVisionConeScale ~= nil
+        or settings.playerVisionConeAlpha ~= nil
+    if settings.playerFovStyleVersion ~= 1 and hasLegacySettings then
+        settings.playerFovStyle = settings.showPlayerVisionCone == true and "soft" or "none"
+        settings.playerFovScale = tonumber(settings.playerVisionConeScale)
+            or tonumber(settings.playerFovScale)
+            or PLAYER_PIN_DEFAULTS.playerFovScale
+        settings.playerFovAlpha = tonumber(settings.playerVisionConeAlpha)
+            or tonumber(settings.playerFovAlpha)
+            or PLAYER_PIN_DEFAULTS.playerFovAlpha
+    end
+
+    settings.playerFovStyle = ({ none = true, soft = true, waves = true })[settings.playerFovStyle]
+        and settings.playerFovStyle or PLAYER_PIN_DEFAULTS.playerFovStyle
+    settings.playerFovScale = BattleMaps.Clamp(
+        tonumber(settings.playerFovScale) or PLAYER_PIN_DEFAULTS.playerFovScale,
+        0.25,
+        3.00
+    )
+    settings.playerFovAlpha = BattleMaps.Clamp(
+        tonumber(settings.playerFovAlpha) or PLAYER_PIN_DEFAULTS.playerFovAlpha,
+        0.10,
+        1.00
+    )
+    settings.playerFovStyleVersion = 1
+    settings.showPlayerVisionCone = nil
+    settings.playerVisionConeScale = nil
+    settings.playerVisionConeAlpha = nil
+end
+
 local function MigrateLegacyPinBuckets(config)
     if type(config) ~= "table" then return end
     local legacy = type(config.pins) == "table" and config.pins or {}
+    local playerPins = type(config.playerPins) == "table" and config.playerPins or {}
+    for _, key in ipairs({ "showPlayerVisionCone", "playerVisionConeScale", "playerVisionConeAlpha" }) do
+        if playerPins[key] == nil and legacy[key] ~= nil then
+            playerPins[key] = legacy[key]
+        end
+    end
     config.pins = CopyDefaults(PIN_DEFAULTS, config.pins)
-    config.playerPins = CopyDefaults(PLAYER_PIN_DEFAULTS, config.playerPins)
+    config.playerPins = CopyDefaults(PLAYER_PIN_DEFAULTS, playerPins)
     config.objectives = CopyDefaults(OBJECTIVE_PIN_DEFAULTS, config.objectives)
     config.timers = CopyDefaults(TIMER_DEFAULTS, config.timers)
     config.notifications = CopyDefaults(NOTIFICATION_DEFAULTS, config.notifications)
+
+    -- In-combat team-pin scaling is retired. Keep both compatibility buckets
+    -- pinned to 1 so an older profile cannot silently restore the old effect.
+    config.playerPins.combatTeamPinScale = 1
+    config.pins.combatTeamPinScale = 1
 
     for key in pairs(PLAYER_PIN_DEFAULTS) do
         if config.playerPins[key] == nil and legacy[key] ~= nil then
@@ -900,6 +961,10 @@ local function MigrateLegacyPinBuckets(config)
             config.objectives[key] = legacy[key]
         end
     end
+    NormalizePlayerFovSettings(config.playerPins)
+    config.pins.showPlayerVisionCone = nil
+    config.pins.playerVisionConeScale = nil
+    config.pins.playerVisionConeAlpha = nil
 end
 
 local function NewWorldMapViewDefaults()
@@ -946,6 +1011,8 @@ local function NewMapDefaults(info)
     end
 
     -- Keep the legacy combined bucket coherent for older modules or profiles.
+    defaults.playerPins.combatTeamPinScale = 1
+    defaults.pins.combatTeamPinScale = 1
     for key in pairs(PIN_DEFAULTS) do
         local value = defaults.playerPins[key]
         if value == nil then value = defaults.objectives[key] end
@@ -984,6 +1051,11 @@ function Database:Initialize()
         and BattleMapsDB.useSolidTeamPinOutOfCombat ~= nil
     local previousCombatTextureSetting = type(BattleMapsDB) == "table"
         and BattleMapsDB.useCombatTeamPinTexture
+    local previousPlayerPinStyleVersion = type(BattleMapsDB) == "table"
+        and tonumber(BattleMapsDB.playerPinStyleVersion)
+        or 0
+    local previousCustomPlayerArrow = type(BattleMapsDB) == "table"
+        and BattleMapsDB.useCustomPlayerArrow
 
     BattleMapsDB = CopyDefaults(ROOT_DEFAULTS, BattleMapsDB)
     BattleMapsDB.maps = BattleMapsDB.maps or {}
@@ -1011,8 +1083,10 @@ function Database:Initialize()
     BattleMapsDB.useCombatTeamPinTexture = nil
 
     local colorMode = BattleMapsDB.playerArrowColorMode
-    if colorMode ~= "faction" and colorMode ~= "class" and colorMode ~= "custom" then
-        BattleMapsDB.playerArrowColorMode = "faction"
+    if colorMode ~= "class" and colorMode ~= "custom" then
+        -- Faction colour is retired. Class colour is evaluated from the
+        -- currently logged-in character rather than from a saved RGB value.
+        BattleMapsDB.playerArrowColorMode = "class"
     end
 
     local customColor = type(BattleMapsDB.playerArrowCustomColor) == "table"
@@ -1024,13 +1098,15 @@ function Database:Initialize()
 
     BattleMapsDB.fanOutTeamPinsOnHover = BattleMapsDB.fanOutTeamPinsOnHover ~= false
     BattleMapsDB.showTeamSpecIcons = BattleMapsDB.showTeamSpecIcons ~= false
+    BattleMapsDB.combatTeamPinScale = 1
     local healerIconColor = type(BattleMapsDB.healerIconCustomColor) == "table"
         and BattleMapsDB.healerIconCustomColor or {}
     healerIconColor.r = BattleMaps.Clamp(tonumber(healerIconColor.r or healerIconColor[1]) or 1, 0, 1)
     healerIconColor.g = BattleMaps.Clamp(tonumber(healerIconColor.g or healerIconColor[2]) or 1, 0, 1)
     healerIconColor.b = BattleMaps.Clamp(tonumber(healerIconColor.b or healerIconColor[3]) or 1, 0, 1)
     BattleMapsDB.healerIconCustomColor = healerIconColor
-    BattleMapsDB.healerIconColorMode = nil -- retired: healer icon colour is always custom
+    BattleMapsDB.healerIconColorMode = BattleMapsDB.healerIconColorMode == "class"
+        and "class" or "custom"
 
     if BattleMapsDB.factionSwapAlert == nil then
         BattleMapsDB.factionSwapAlert = BattleMapsDB.factionColoredBorder ~= false
@@ -1042,6 +1118,17 @@ function Database:Initialize()
     if BattleMapsDB.frameBorderStyle ~= "tooltip" and BattleMapsDB.frameBorderStyle ~= "dialog" then
         BattleMapsDB.frameBorderStyle = "solid"
     end
+    local frameBackgroundColor = type(BattleMapsDB.frameBackgroundColor) == "table"
+        and BattleMapsDB.frameBackgroundColor or {}
+    frameBackgroundColor.r = BattleMaps.Clamp(
+        tonumber(frameBackgroundColor.r or frameBackgroundColor[1]) or 0.015, 0, 1)
+    frameBackgroundColor.g = BattleMaps.Clamp(
+        tonumber(frameBackgroundColor.g or frameBackgroundColor[2]) or 0.015, 0, 1)
+    frameBackgroundColor.b = BattleMaps.Clamp(
+        tonumber(frameBackgroundColor.b or frameBackgroundColor[3]) or 0.015, 0, 1)
+    frameBackgroundColor.a = BattleMaps.Clamp(
+        tonumber(frameBackgroundColor.a or frameBackgroundColor[4]) or 0.12, 0, 1)
+    BattleMapsDB.frameBackgroundColor = frameBackgroundColor
 
     -- These are now core behaviours rather than optional menu toggles.
     BattleMapsDB.highlightFriendlyHealers = true
@@ -1052,6 +1139,23 @@ function Database:Initialize()
     -- older profile cannot recreate the removed renderer or options controls.
     BattleMapsDB.showPlayerRadius = nil
     BattleMapsDB.playerRadiusSize = nil
+
+    if previousPlayerPinStyleVersion < 1 then
+        -- The Player pin selector supersedes the former Custom player arrow
+        -- checkbox. Preserve the existing choice once, before discarding the
+        -- retired key.
+        BattleMapsDB.playerPinStyle = previousCustomPlayerArrow == false
+            and "default" or "arrow"
+    end
+    BattleMapsDB.playerPinStyle = ({
+        default = true,
+        arrow = true,
+        compass = true,
+        team = true,
+    })[BattleMapsDB.playerPinStyle] and BattleMapsDB.playerPinStyle or "arrow"
+    BattleMapsDB.playerPinStyleVersion = 1
+    BattleMapsDB.useCustomPlayerArrow = nil
+    NormalizePlayerFovSettings(BattleMapsDB)
 
     BattleMapsDB.fadeMapHeader = BattleMapsDB.fadeMapHeader ~= false
     BattleMapsDB.mapTextureAlpha = BattleMaps.Clamp(tonumber(BattleMapsDB.mapTextureAlpha) or 1, 0.20, 1.00)
@@ -1152,6 +1256,8 @@ function Database:Initialize()
     timerTextColor.g = BattleMaps.Clamp(tonumber(timerTextColor.g or timerTextColor[2]) or 1, 0, 1)
     timerTextColor.b = BattleMaps.Clamp(tonumber(timerTextColor.b or timerTextColor[3]) or 1, 0, 1)
     BattleMapsDB.objectiveTimerTextColor = timerTextColor
+    BattleMapsDB.objectiveTimerTextColorMode = BattleMapsDB.objectiveTimerTextColorMode == "class"
+        and "class" or "custom"
     BattleMapsDB.objectiveCaptureFillDirection = BattleMapsDB.objectiveCaptureFillDirection == "vertical"
         and "vertical" or "horizontal"
     BattleMapsDB.objectiveAssaultPulseCount = BattleMaps.Clamp(
@@ -1255,18 +1361,31 @@ function Database:Initialize()
             24
         ) + 0.5)
         config.objectives.factionColorEnemyKotmoguOrbs = config.objectives.factionColorEnemyKotmoguOrbs ~= false
-        config.playerPins.combatTeamPinScale = BattleMaps.Clamp(tonumber(config.playerPins.combatTeamPinScale) or 1.25, 0.50, 3.00)
+        config.playerPins.combatTeamPinScale = 1
         config.playerPins.stackTeamPins = config.playerPins.stackTeamPins ~= false
         config.playerPins.fanOutTeamPinsOnHover = config.playerPins.fanOutTeamPinsOnHover ~= false
         config.playerPins.excludePlayerArrowFromStack = config.playerPins.excludePlayerArrowFromStack == true
         config.playerPins.showTeamSpecIcons = config.playerPins.showTeamSpecIcons ~= false
+        if previousPlayerPinStyleVersion < 1 then
+            config.playerPins.playerPinStyle = previousCustomPlayerArrow == false
+                and "default" or "arrow"
+        end
+        config.playerPins.playerPinStyle = ({
+            default = true,
+            arrow = true,
+            compass = true,
+            team = true,
+        })[config.playerPins.playerPinStyle] and config.playerPins.playerPinStyle or "arrow"
         local healerColor = type(config.playerPins.healerIconCustomColor) == "table"
             and config.playerPins.healerIconCustomColor or {}
         healerColor.r = BattleMaps.Clamp(tonumber(healerColor.r or healerColor[1]) or 1, 0, 1)
         healerColor.g = BattleMaps.Clamp(tonumber(healerColor.g or healerColor[2]) or 1, 0, 1)
         healerColor.b = BattleMaps.Clamp(tonumber(healerColor.b or healerColor[3]) or 1, 0, 1)
         config.playerPins.healerIconCustomColor = healerColor
-        config.playerPins.healerIconColorMode = nil -- retired
+        config.playerPins.healerIconColorMode = config.playerPins.healerIconColorMode == "class"
+            and "class" or "custom"
+        config.timers.objectiveTimerTextColorMode = config.timers.objectiveTimerTextColorMode == "class"
+            and "class" or "custom"
         config.playerPins.playerRadiusSize = nil
         config.playerPins.teamPinStackRadius = BattleMaps.Clamp(
             math.floor((tonumber(config.playerPins.teamPinStackRadius) or BattleMapsDB.teamPinStackRadius or 18) + 0.5), 8, 40)
@@ -1559,6 +1678,14 @@ function Database:ResetPlayerPins(mapID)
     if not target then return end
     local source = GetCategoryResetSource(mapID, PLAYER_PIN_DEFAULTS, "playerPins", useGlobal)
     ResetDefaults(source, target)
+    target.playerFovStyle = source.playerFovStyle or PLAYER_PIN_DEFAULTS.playerFovStyle
+    target.playerFovScale = source.playerFovScale or PLAYER_PIN_DEFAULTS.playerFovScale
+    target.playerFovAlpha = source.playerFovAlpha or PLAYER_PIN_DEFAULTS.playerFovAlpha
+    target.playerFovStyleVersion = 1
+    target.showPlayerVisionCone = nil
+    target.playerVisionConeScale = nil
+    target.playerVisionConeAlpha = nil
+    NormalizePlayerFovSettings(target)
 end
 
 function Database:ResetObjectives(mapID)

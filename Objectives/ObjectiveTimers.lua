@@ -205,6 +205,19 @@ local function GetTimerSettings(mapID)
     return BattleMaps.Database and BattleMaps.Database:Get() or nil
 end
 
+local function GetObjectiveTimerTextColor(settings)
+    if settings and settings.objectiveTimerTextColorMode == "class"
+        and Pins.GetPlayerClassColor then
+        return Pins:GetPlayerClassColor()
+    end
+
+    local color = type(settings and settings.objectiveTimerTextColor) == "table"
+        and settings.objectiveTimerTextColor or {}
+    return BattleMaps.Clamp(tonumber(color.r or color[1]) or 1, 0, 1),
+        BattleMaps.Clamp(tonumber(color.g or color[2]) or 1, 0, 1),
+        BattleMaps.Clamp(tonumber(color.b or color[3]) or 1, 0, 1)
+end
+
 local function GetBlitzUncapDuration(mapID, forceBlitz)
     if BattleMaps.Database and BattleMaps.Database.GetObjectiveBlitzUncapDuration then
         return BattleMaps.Database:GetObjectiveBlitzUncapDuration(mapID, forceBlitz)
@@ -961,11 +974,7 @@ function Pins:ApplyObjectiveCaptureTimerTextStyle(pin)
     local scaledOffsetX = math.floor((offsetX * textureScale) + (offsetX >= 0 and 0.5 or -0.5))
     local scaledOffsetY = math.floor((offsetY * textureScale) + (offsetY >= 0 and 0.5 or -0.5))
 
-    local color = type(db.objectiveTimerTextColor) == "table"
-        and db.objectiveTimerTextColor or {}
-    local r = BattleMaps.Clamp(tonumber(color.r or color[1]) or 1, 0, 1)
-    local g = BattleMaps.Clamp(tonumber(color.g or color[2]) or 1, 0, 1)
-    local b = BattleMaps.Clamp(tonumber(color.b or color[3]) or 1, 0, 1)
+    local r, g, b = GetObjectiveTimerTextColor(db)
     local textAlpha = BattleMaps.Clamp(tonumber(db.objectiveTimerTextAlpha) or 1.00, 0, 1)
     local styleKey = table.concat({
         fontKey,
@@ -2001,11 +2010,7 @@ local function ApplySeethingAzeriteTextStyle(pin, mapID)
     local offsetY = BattleMaps.Clamp(tonumber(settings.objectiveTimerTextOffsetY) or 0, -32, 32)
     local scaledOffsetX = math.floor((offsetX * textureScale) + (offsetX >= 0 and 0.5 or -0.5))
     local scaledOffsetY = math.floor((offsetY * textureScale) + (offsetY >= 0 and 0.5 or -0.5))
-    local color = type(settings.objectiveTimerTextColor) == "table"
-        and settings.objectiveTimerTextColor or {}
-    local r = BattleMaps.Clamp(tonumber(color.r or color[1]) or 1, 0, 1)
-    local g = BattleMaps.Clamp(tonumber(color.g or color[2]) or 1, 0, 1)
-    local b = BattleMaps.Clamp(tonumber(color.b or color[3]) or 1, 0, 1)
+    local r, g, b = GetObjectiveTimerTextColor(settings)
     local alpha = BattleMaps.Clamp(tonumber(settings.objectiveTimerTextAlpha) or 1, 0, 1)
     local styleKey = table.concat({
         fontKey, fontPath, tostring(fontSize),

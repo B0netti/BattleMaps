@@ -121,7 +121,7 @@ function Options:CreateBasesPage(parent)
             end
         end)
 
-    self.objectiveCaptureFillDirection = MakeDropdown(capture, "Fill direction", captureRightX, -28, 150,
+    self.objectiveCaptureFillDirection = MakeDropdown(capture, "Fill direction", captureCenterX, -28, captureCenterWidth,
         function()
             return {
                 { value = "horizontal", label = "Horizontal" },
@@ -132,7 +132,8 @@ function Options:CreateBasesPage(parent)
         function(value)
             TimerSettings().objectiveCaptureFillDirection = value == "vertical" and "vertical" or "horizontal"
             if BattleMaps.Pins then BattleMaps.Pins:RefreshPOIs() end
-        end)
+        end,
+        true)
 
     self.captureTimerPulseCheck = MakeCheckbox(capture, "Pulse during capture", captureLeftX, -78,
         function() return TimerSettings().pulseObjectiveDuringCaptureTimer ~= false end,
@@ -279,14 +280,21 @@ function Options:CreateBasesPage(parent)
 
     self.objectiveTimerTextColorControl = MakeColorSwatchControl(
         timerText,
-        "Text colour",
+        "Text color",
         textRightX,
         -78,
-        function() return TimerSettings().objectiveTimerTextColor or { r = 1, g = 0.8352941870689392, b = 0.3333333432674408 } end,
+        function()
+            local settings = TimerSettings()
+            if settings.objectiveTimerTextColorMode == "class"
+                and BattleMaps.Pins and BattleMaps.Pins.GetPlayerClassColor then
+                local r, g, b = BattleMaps.Pins:GetPlayerClassColor()
+                return { r = r, g = g, b = b }
+            end
+            return settings.objectiveTimerTextColor
+                or { r = 1, g = 0.8352941870689392, b = 0.3333333432674408 }
+        end,
         function() self:OpenObjectiveTimerTextColorPicker() end,
-        150,
-        88,
-        "Colour"
+        150
     )
 
     self.objectiveTimerTextOffsetYSlider = MakeSlider(timerText, "Y offset", textLeftX, -134, -32, 32, 1,
@@ -311,7 +319,8 @@ function Options:CreateBasesPage(parent)
         function(value)
             TimerSettings().objectiveTimerTextFont = value
             RefreshTimerText()
-        end)
+        end,
+        true)
 
     self.objectiveTimerTextAlphaSlider = MakeSlider(timerText, "Text alpha", textRightX, -134, 0.00, 1.00, 0.05,
         function() return tonumber(TimerSettings().objectiveTimerTextAlpha) or 1.00 end,
@@ -345,7 +354,7 @@ function Options:CreateBasesPage(parent)
     AddControlTooltip(self.objectiveTimerTextCheck, "Cap countdown text",
         "Shows the remaining capture time directly over the stationary base texture.")
     AddControlTooltip(self.objectiveBlitzUncapTextCheck, "Blitz uncap text",
-        "Shows the Battleground Blitz controlled-base countdown after a base fully captures and before it unlocks/uncaps. Uses the same font, colour, alpha, threshold, and offset settings as the capture countdown.")
+        "Shows the Battleground Blitz controlled-base countdown after a base fully captures and before it unlocks/uncaps. Uses the same font, color, alpha, threshold, and offset settings as the capture countdown.")
     AddControlTooltip(self.objectiveTimerTextThresholdSlider, "Display threshold",
         "The countdown appears only when the remaining time is at or below this value.")
     AddControlTooltip(self.objectiveTimerTextFontDropdown, "Font",
@@ -358,8 +367,8 @@ function Options:CreateBasesPage(parent)
         "Moves the countdown up or down relative to the base texture. The offset scales with the texture.")
     AddControlTooltip(self.objectiveTimerTextSizeSlider, "Text size",
         "Sets the base countdown size. It scales with the rendered base texture and map zoom.")
-    AddControlTooltip(self.objectiveTimerTextColorControl, "Text colour",
-        "Chooses the countdown text colour.")
+    AddControlTooltip(self.objectiveTimerTextColorControl, "Text color",
+        "Click the color swatch to choose the countdown text color. Class follows the currently logged-in character.")
 end
 
 if Options.RegisterPage then

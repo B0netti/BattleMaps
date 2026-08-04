@@ -2,8 +2,8 @@ local addonName, BattleMaps = ...
 
 _G.BattleMaps = BattleMaps
 BattleMaps.addonName = addonName
-BattleMaps.VERSION = "2.6.22"
-BattleMaps.BUILD = "2.6.22-spawn-tether-ctf-layout"
+BattleMaps.VERSION = "2.6.46"
+BattleMaps.BUILD = "2.6.46-developer-map-controls"
 
 BattleMaps.COLORS = {
     red = { 0.77, 0.17, 0.16 },
@@ -1102,6 +1102,13 @@ SlashCmdList.BATTLEMAPS = function(message)
     elseif message == "unlock" or message == "edit" then
         BattleMaps.MapFrame:ShowCurrentOrSelected()
         BattleMaps.MapFrame:BeginEdit()
+    elseif message == "dev" or message == "developer" then
+        local db = BattleMaps.Database:Get()
+        db.developerOptions = db.developerOptions ~= true
+        BattleMaps.Chat(
+            "Developer map controls " .. (db.developerOptions and "enabled." or "disabled."),
+            "Use /reload to rebuild the options panel."
+        )
     elseif message == "reset" then
         local mapID = BattleMaps.ResolveCurrentBattlegroundMapID() or BattleMaps.MapFrame.currentMapID
         if mapID then

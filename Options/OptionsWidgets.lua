@@ -116,6 +116,15 @@ local function SetFontColor(fontString, color, alpha)
     fontString:SetTextColor(color[1], color[2], color[3], alpha or 1)
 end
 
+local function SetControlLabelEnabledColor(fontString, enabled)
+    if not fontString then return end
+    if enabled == true then
+        SetFontColor(fontString, BattleMaps.COLORS.parchmentLight)
+    else
+        fontString:SetTextColor(0.45, 0.45, 0.45, 1)
+    end
+end
+
 local function SetControlEnabled(control, enabled)
     if not control then return end
     enabled = enabled == true
@@ -123,11 +132,7 @@ local function SetControlEnabled(control, enabled)
     if control.SetEnabled then control:SetEnabled(enabled) end
     if control.SetControlEnabled then control:SetControlEnabled(enabled) end
     if control.Text then
-        control.Text:SetTextColor(
-            enabled and 1 or 0.45,
-            enabled and 0.82 or 0.45,
-            enabled and 0.40 or 0.45
-        )
+        SetControlLabelEnabledColor(control.Text, enabled)
     end
 end
 
@@ -225,7 +230,7 @@ local function MakeSlider(parent, label, x, y, minimum, maximum, step, getter, s
     holder.SetControlEnabled = function(self, enabled)
         enabled = enabled == true
         slider:SetEnabled(enabled)
-        title:SetTextColor(enabled and 1 or 0.45, enabled and 0.82 or 0.45, enabled and 0.40 or 0.45)
+        SetControlLabelEnabledColor(title, enabled)
         valueText:SetTextColor(enabled and 1 or 0.45, enabled and 1 or 0.45, enabled and 1 or 0.45)
     end
 
@@ -384,7 +389,7 @@ local function MakeRangeSlider(parent, label, x, y, minimum, maximum, step,
         selected:SetAlpha(enabled and 0.85 or 0.30)
         lowerThumb:SetVertexColor(enabled and 1 or 0.45, enabled and 1 or 0.45, enabled and 1 or 0.45)
         upperThumb:SetVertexColor(enabled and 1 or 0.45, enabled and 1 or 0.45, enabled and 1 or 0.45)
-        title:SetTextColor(enabled and 1 or 0.45, enabled and 0.82 or 0.45, enabled and 0.40 or 0.45)
+        SetControlLabelEnabledColor(title, enabled)
         valueText:SetTextColor(enabled and 1 or 0.45, enabled and 1 or 0.45, enabled and 1 or 0.45)
     end
 
@@ -432,7 +437,7 @@ local function MakeChoiceSelector(parent, label, x, y, choices, getter, setter, 
 
     holder.SetControlEnabled = function(self, enabled)
         enabled = enabled == true
-        title:SetTextColor(enabled and 1 or 0.45, enabled and 0.82 or 0.45, enabled and 0.40 or 0.45)
+        SetControlLabelEnabledColor(title, enabled)
         for _, button in pairs(buttons) do button:SetEnabled(enabled) end
     end
 
@@ -441,23 +446,35 @@ local function MakeChoiceSelector(parent, label, x, y, choices, getter, setter, 
 end
 
 
-local function MakeDropdown(parent, label, x, y, width, itemsGetter, getter, setter)
+local function MakeDropdown(parent, label, x, y, width, itemsGetter, getter, setter, inlineLabel)
     width = width or 280
     local hasLabel = type(label) == "string" and label ~= ""
+    inlineLabel = inlineLabel == true and hasLabel
     local holder = CreateFrame("Frame", nil, parent)
     holder:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
-    holder:SetSize(width, hasLabel and 44 or 24)
+    holder:SetSize(width, hasLabel and not inlineLabel and 44 or 24)
 
     local title = holder:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
-    title:SetPoint("TOPLEFT", holder, "TOPLEFT", 0, 0)
     title:SetText(hasLabel and label or "")
     title:SetShown(hasLabel)
     SetFontColor(title, BattleMaps.COLORS.parchmentLight)
     holder.title = title
 
-    local button = MakeButton(holder, "", width, 24)
+    local buttonWidth = width
+    if inlineLabel then
+        title:SetPoint("LEFT", holder, "LEFT", 0, 0)
+        buttonWidth = math.min(140, math.max(72, width - math.ceil(title:GetStringWidth()) - 10))
+    else
+        title:SetPoint("TOPLEFT", holder, "TOPLEFT", 0, 0)
+    end
+
+    local button = MakeButton(holder, "", buttonWidth, 24)
     holder.button = button
-    button:SetPoint("TOPLEFT", holder, "TOPLEFT", 0, hasLabel and -17 or 0)
+    if inlineLabel then
+        button:SetPoint("RIGHT", holder, "RIGHT", 0, 0)
+    else
+        button:SetPoint("TOPLEFT", holder, "TOPLEFT", 0, hasLabel and -17 or 0)
+    end
 
     local arrow = button:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
     arrow:SetPoint("RIGHT", button, "RIGHT", -10, 1)
@@ -472,7 +489,7 @@ local function MakeDropdown(parent, label, x, y, width, itemsGetter, getter, set
     menu:SetClampedToScreen(true)
     menu:EnableMouse(true)
     menu:EnableMouseWheel(true)
-    menu:SetWidth(width)
+    menu:SetWidth(buttonWidth)
     menu:Hide()
     if menu.SetBackdrop then
         menu:SetBackdrop({
@@ -591,12 +608,7 @@ local function MakeDropdown(parent, label, x, y, width, itemsGetter, getter, set
     holder.SetControlEnabled = function(self, enabled)
         enabled = enabled == true
         button:SetEnabled(enabled)
-        title:SetTextColor(
-            enabled and BattleMaps.COLORS.buttonText[1] or 0.45,
-            enabled and BattleMaps.COLORS.buttonText[2] or 0.45,
-            enabled and BattleMaps.COLORS.buttonText[3] or 0.45,
-            1
-        )
+        SetControlLabelEnabledColor(title, enabled)
         if not enabled then menu:Hide() end
     end
 
@@ -605,41 +617,61 @@ local function MakeDropdown(parent, label, x, y, width, itemsGetter, getter, set
     return holder
 end
 
-local function MakeColorSwatchControl(parent, label, x, y, getter, clickHandler, holderWidth, buttonWidth, buttonText)
+local function MakeColorSwatchControl(parent, label, x, y, getter, clickHandler, holderWidth)
     local holder = CreateFrame("Frame", nil, parent)
     holder:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
     holderWidth = holderWidth or 304
-    buttonWidth = buttonWidth or 128
-    holder:SetSize(holderWidth, 44)
+    holder:SetSize(holderWidth, 48)
 
     local title = holder:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
-    title:SetPoint("TOPLEFT", holder, "TOPLEFT", 0, 0)
+    title:SetPoint("LEFT", holder, "LEFT", 0, 0)
     title:SetText(label)
     SetFontColor(title, BattleMaps.COLORS.parchmentLight)
     holder.title = title
 
-    local button = MakeButton(holder, buttonText or "Choose colour", buttonWidth, 24)
-    button:SetPoint("TOPLEFT", holder, "TOPLEFT", 0, -17)
-    button:SetScript("OnClick", clickHandler)
-    holder.button = button
-
     local swatch = CreateFrame("Button", nil, holder)
-    swatch:SetSize(34, 24)
-    swatch:SetPoint("LEFT", button, "RIGHT", 8, 0)
+    swatch:SetSize(48, 48)
+    swatch:SetPoint("LEFT", title, "RIGHT", 8, 0)
+    swatch:SetHitRectInsets(-2, -2, -2, -2)
     swatch:SetScript("OnClick", clickHandler)
     holder.swatch = swatch
 
     local border = swatch:CreateTexture(nil, "BACKGROUND")
     border:SetAllPoints()
-    border:SetColorTexture(0, 0, 0, 1)
+    border:SetTexture("Interface\\AddOns\\BattleMaps\\Media\\team_border.tga")
+    border:SetDesaturated(true)
+    holder.border = border
     local fill = swatch:CreateTexture(nil, "ARTWORK")
-    fill:SetPoint("TOPLEFT", 2, -2)
-    fill:SetPoint("BOTTOMRIGHT", -2, 2)
+    fill:SetPoint("CENTER")
+    fill:SetSize(36, 36)
+    fill:SetTexture("Interface\\AddOns\\BattleMaps\\Media\\team_fill_white.tga")
     holder.fill = fill
+    holder.BattleMapsTooltipTargets = { swatch }
+
+    local controlEnabled = true
+    local hovered = false
+    local function RefreshBorder()
+        if not controlEnabled then
+            border:SetVertexColor(0.32, 0.32, 0.32, 1)
+        elseif hovered then
+            border:SetVertexColor(1.00, 1.00, 1.00, 1)
+        else
+            border:SetVertexColor(0.68, 0.68, 0.68, 1)
+        end
+    end
+    swatch:SetScript("OnEnter", function()
+        hovered = true
+        RefreshBorder()
+    end)
+    swatch:SetScript("OnLeave", function()
+        hovered = false
+        RefreshBorder()
+    end)
+    RefreshBorder()
 
     holder.Refresh = function(self)
         local color = type(getter) == "function" and getter() or {}
-        fill:SetColorTexture(
+        fill:SetVertexColor(
             BattleMaps.Clamp(tonumber(color.r or color[1]) or 1, 0, 1),
             BattleMaps.Clamp(tonumber(color.g or color[2]) or 1, 0, 1),
             BattleMaps.Clamp(tonumber(color.b or color[3]) or 1, 0, 1),
@@ -648,11 +680,11 @@ local function MakeColorSwatchControl(parent, label, x, y, getter, clickHandler,
     end
 
     holder.SetControlEnabled = function(self, enabled)
-        enabled = enabled == true
-        button:SetEnabled(enabled)
-        swatch:SetEnabled(enabled)
-        title:SetTextColor(enabled and 1 or 0.45, enabled and 0.82 or 0.45, enabled and 0.40 or 0.45)
-        fill:SetAlpha(enabled and 1 or 0.45)
+        controlEnabled = enabled == true
+        swatch:SetEnabled(controlEnabled)
+        SetControlLabelEnabledColor(title, controlEnabled)
+        fill:SetAlpha(controlEnabled and 1 or 0.45)
+        RefreshBorder()
     end
 
     Options.refreshers[#Options.refreshers + 1] = holder
@@ -670,14 +702,19 @@ local function AddControlTooltip(control, title, description)
         targets[#targets + 1] = target
     end
 
-    AddTarget(control)
-    AddTarget(control.slider)
-    AddTarget(control.hit)
-    AddTarget(control.button)
-    AddTarget(control.swatch)
-    AddTarget(control.editBox)
-    if type(control.buttons) == "table" then
-        for _, button in pairs(control.buttons) do AddTarget(button) end
+    if type(control.BattleMapsTooltipTargets) == "table" then
+        for _, target in ipairs(control.BattleMapsTooltipTargets) do AddTarget(target) end
+    else
+        AddTarget(control)
+        AddTarget(control.slider)
+        AddTarget(control.hit)
+        AddTarget(control.button)
+        AddTarget(control.swatch)
+        AddTarget(control.colorButton)
+        AddTarget(control.editBox)
+        if type(control.buttons) == "table" then
+            for _, button in pairs(control.buttons) do AddTarget(button) end
+        end
     end
 
     for _, target in ipairs(targets) do
@@ -741,65 +778,33 @@ local function MakeCompactNumberInput(parent, x, y, minimum, maximum, getter, se
     return holder
 end
 
-local PLAYER_ARROW_COLOR_CHOICES = {
-    { value = "faction", label = "Faction" },
-    { value = "class", label = "Class" },
-    { value = "custom", label = "Custom" },
-}
-
 local BORDER_STYLE_OPTIONS = {
     { value = "solid", label = "Solid" },
     { value = "tooltip", label = "Tooltip" },
     { value = "dialog", label = "Dialog" },
 }
 
-local function MakePlayerColorSelector(parent, x, y)
+local function MakePlayerColorControl(parent, x, y, holderWidth)
     local db = BattleMaps.Database:Get()
-    local holder = MakeChoiceSelector(
+    return MakeColorSwatchControl(
         parent,
-        "Player arrow / radius colour",
+        "Pin color",
         x,
         y,
-        PLAYER_ARROW_COLOR_CHOICES,
-        function() return db.playerArrowColorMode end,
-        function(value)
-            db.playerArrowColorMode = value
-            if BattleMaps.Pins then BattleMaps.Pins:RefreshGroup() end
-            if value == "custom" then C_Timer.After(0, function() Options:OpenPlayerArrowColorPicker() end) end
+        function()
+            if db.playerArrowColorMode == "custom" then
+                local c = db.playerArrowCustomColor or {}
+                return c
+            end
+            if BattleMaps.Pins and BattleMaps.Pins.GetPlayerClassColor then
+                local r, g, b = BattleMaps.Pins:GetPlayerClassColor()
+                return { r = r, g = g, b = b }
+            end
+            return { r = 1, g = 1, b = 1 }
         end,
-        76
+        function() Options:OpenPlayerArrowColorPicker() end,
+        holderWidth or 160
     )
-
-    local swatch = CreateFrame("Button", nil, holder)
-    swatch:SetSize(27, 22)
-    swatch:SetPoint("TOPLEFT", holder, "TOPLEFT", 244, -17)
-    local border = swatch:CreateTexture(nil, "BACKGROUND")
-    border:SetAllPoints()
-    border:SetColorTexture(0, 0, 0, 1)
-    local fill = swatch:CreateTexture(nil, "ARTWORK")
-    fill:SetPoint("TOPLEFT", 2, -2)
-    fill:SetPoint("BOTTOMRIGHT", -2, 2)
-    swatch.fill = fill
-    swatch:SetScript("OnClick", function() Options:OpenPlayerArrowColorPicker() end)
-
-    local oldRefresh = holder.Refresh
-    holder.Refresh = function(self)
-        oldRefresh(self)
-        local custom = db.playerArrowColorMode == "custom"
-        swatch:SetShown(custom)
-        if custom then
-            local c = db.playerArrowCustomColor or {}
-            fill:SetColorTexture(tonumber(c.r) or 1, tonumber(c.g) or 0.82, tonumber(c.b) or 0.22, 1)
-        end
-    end
-
-    local oldEnable = holder.SetControlEnabled
-    holder.SetControlEnabled = function(self, enabled)
-        oldEnable(self, enabled)
-        swatch:SetEnabled(enabled)
-    end
-
-    return holder
 end
 
 
@@ -876,7 +881,7 @@ Options.Widgets = {
     MakeColorSwatchControl = MakeColorSwatchControl,
     MakeCompactNumberInput = MakeCompactNumberInput,
     AddControlTooltip = AddControlTooltip,
-    MakePlayerColorSelector = MakePlayerColorSelector,
+    MakePlayerColorControl = MakePlayerColorControl,
     MakeObjectivePulseColorSelector = MakeObjectivePulseColorSelector,
     SetFontColor = SetFontColor,
     SetControlEnabled = SetControlEnabled,
@@ -885,6 +890,4 @@ Options.Widgets = {
 
 Options.Constants = {
     BORDER_STYLE_OPTIONS = BORDER_STYLE_OPTIONS,
-    PLAYER_ARROW_COLOR_CHOICES = PLAYER_ARROW_COLOR_CHOICES,
 }
-
