@@ -34,6 +34,10 @@ end
 
 function Options:CreateUnitsPage(parent)
     local db = BattleMaps.Database:Get()
+    local showDeveloperMapControls = db.developerOptions == true
+    local playerPanelHeight = showDeveloperMapControls and 214 or 160
+    local teamPanelY = -(42 + playerPanelHeight)
+    local stackingPanelY = teamPanelY - 174
     local page = CreateFrame("Frame", nil, parent)
     self.pages.units = page
     page:SetAllPoints(parent)
@@ -62,7 +66,7 @@ function Options:CreateUnitsPage(parent)
 
     -- Match the three-column arrangement used by Capture Progress: FoV
     -- controls on the first row and player-pin controls on the second.
-    local player = MakePanel(page, "Player Arrow", 0, -34, 684, 160)
+    local player = MakePanel(page, "Player Arrow", 0, -34, 684, playerPanelHeight)
     self.playerColorControl = MakePlayerColorControl(player, 500, -84, 160)
     AddControlTooltip(self.playerColorControl, "Pin color",
         "Click the color swatch to open the picker for player arrows and team pins. Class follows the currently logged-in character.")
@@ -111,6 +115,7 @@ function Options:CreateUnitsPage(parent)
                 { value = "none", label = "None" },
                 { value = "soft", label = "Soft" },
                 { value = "waves", label = "Waves" },
+                { value = "spotlight", label = "Spotlight" },
             }
         end,
         function() return self:GetUnitsTarget().playerFovStyle or "none" end,
@@ -119,6 +124,7 @@ function Options:CreateUnitsPage(parent)
                 none = true,
                 soft = true,
                 waves = true,
+                spotlight = true,
             })[value] and value or "none"
             self:Refresh()
             if BattleMaps.Pins then BattleMaps.Pins:RefreshGroup() end
@@ -127,7 +133,7 @@ function Options:CreateUnitsPage(parent)
     self.playerFovStyleDropdown.button:SetWidth(96)
     self.playerFovStyleDropdown.menu:SetWidth(96)
     AddControlTooltip(self.playerFovStyleDropdown, "FoV",
-        "Selects the field-of-view artwork behind teammates and carried objectives. None hides it; Soft and Waves retain their authored colors and do not receive mouse input.")
+        "Selects the field-of-view artwork. Spotlight combines under-map lighting with additive Arc and Beam layers. All FoV artwork retains its authored colors and does not receive mouse input.")
 
     self.playerFovScaleSlider = MakeSlider(player, "FoV scale", 210, -30, 0.25, 3.00, 0.05,
         function() return tonumber(self:GetUnitsTarget().playerFovScale) or 1.00 end,
@@ -151,7 +157,58 @@ function Options:CreateUnitsPage(parent)
     AddControlTooltip(self.playerFovAlphaSlider, "FoV alpha",
         "Changes only the FoV transparency. The artwork always retains its authored color.")
 
-    local team = MakePanel(page, "Team Units", 0, -202, 684, 168)
+    if showDeveloperMapControls then
+        self.playerFovSpotlightAlphaSlider = MakeSlider(
+            player,
+            "Spotlight alpha",
+            10,
+            -138,
+            0.00,
+            1.00,
+            0.05,
+            function() return tonumber(self:GetUnitsTarget().playerFovSpotlightAlpha) or 1.00 end,
+            function(value)
+                self:GetUnitsTarget().playerFovSpotlightAlpha = value
+                if BattleMaps.Pins then BattleMaps.Pins:RefreshGroup() end
+            end,
+            function(value) return string.format("%d%%", math.floor((value * 100) + 0.5)) end,
+            180
+        )
+        self.playerFovBeamAlphaSlider = MakeSlider(
+            player,
+            "Beam alpha",
+            210,
+            -138,
+            0.00,
+            1.00,
+            0.05,
+            function() return tonumber(self:GetUnitsTarget().playerFovBeamAlpha) or 1.00 end,
+            function(value)
+                self:GetUnitsTarget().playerFovBeamAlpha = value
+                if BattleMaps.Pins then BattleMaps.Pins:RefreshGroup() end
+            end,
+            function(value) return string.format("%d%%", math.floor((value * 100) + 0.5)) end,
+            250
+        )
+        self.playerFovArcAlphaSlider = MakeSlider(
+            player,
+            "Arc alpha",
+            500,
+            -138,
+            0.00,
+            1.00,
+            0.05,
+            function() return tonumber(self:GetUnitsTarget().playerFovArcAlpha) or 1.00 end,
+            function(value)
+                self:GetUnitsTarget().playerFovArcAlpha = value
+                if BattleMaps.Pins then BattleMaps.Pins:RefreshGroup() end
+            end,
+            function(value) return string.format("%d%%", math.floor((value * 100) + 0.5)) end,
+            160
+        )
+    end
+
+    local team = MakePanel(page, "Team Units", 0, teamPanelY, 684, 168)
     self.combatTeamCheck = MakeCheckbox(team, "Solid out of combat", 10, -30,
         function() return db.useSolidTeamPinOutOfCombat ~= false end,
         function(value)
@@ -211,7 +268,7 @@ function Options:CreateUnitsPage(parent)
     AddControlTooltip(self.healerIconCustomColorControl, "Healer icon color",
         "Click the color swatch to choose the healer cross/icon color. Class follows the currently logged-in character; the circular team-pin fill remains teammate class-colored.")
 
-    local stacking = MakePanel(page, "Team Pin Stacking", 0, -376, 684, 118)
+    local stacking = MakePanel(page, "Team Pin Stacking", 0, stackingPanelY, 684, 118)
     self.teamStackInfoButton = MakeInformationButton(
         stacking,
         142,

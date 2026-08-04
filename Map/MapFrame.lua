@@ -20,10 +20,11 @@ local MapFrame = {
 }
 BattleMaps.MapFrame = MapFrame
 
--- Keep the experimental FoV renderer behind the map artwork while leaving
--- the ordinary objective and unit pin layer above it.
+-- Dedicated FoV parents allow authored passes below and above the map artwork
+-- while leaving the ordinary objective and unit pin layer above both.
 local FOV_LAYER_LEVEL_OFFSET = 1
 local MAP_CANVAS_LEVEL_OFFSET = 10
+local FOV_OVERLAY_LAYER_LEVEL_OFFSET = 15
 local PIN_LAYER_LEVEL_OFFSET = 20
 
 local function GetTemplate()
@@ -324,6 +325,12 @@ function MapFrame:Create()
     canvas:SetPoint("TOPLEFT", viewport, "TOPLEFT", 0, 0)
     canvas:SetSize(1, 1)
     canvas:SetFrameLevel(viewport:GetFrameLevel() + MAP_CANVAS_LEVEL_OFFSET)
+
+    local fovOverlayLayer = CreateFrame("Frame", nil, viewport)
+    self.fovOverlayLayer = fovOverlayLayer
+    fovOverlayLayer:SetAllPoints(viewport)
+    fovOverlayLayer:SetFrameLevel(viewport:GetFrameLevel() + FOV_OVERLAY_LAYER_LEVEL_OFFSET)
+    fovOverlayLayer:EnableMouse(false)
 
     local emptyText = viewport:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     self.emptyText = emptyText

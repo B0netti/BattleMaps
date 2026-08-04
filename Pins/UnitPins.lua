@@ -25,10 +25,43 @@ local CUSTOM_HEALER_PIN_TEXTURE = "Interface\\AddOns\\BattleMaps\\Media\\healer.
 local DEFAULT_PLAYER_ARROW_TEXTURE = "UI-WorldMapArrow"
 local CUSTOM_PLAYER_ARROW_TEXTURE = "Interface\\AddOns\\BattleMaps\\Media\\player_arrow.tga"
 local CUSTOM_PLAYER_COMPASS_TEXTURE = "Interface\\AddOns\\BattleMaps\\Media\\player_compass.tga"
-local PLAYER_FOV_TEXTURES = {
-    soft = "Interface\\AddOns\\BattleMaps\\Media\\fov_soft.tga",
-    waves = "Interface\\AddOns\\BattleMaps\\Media\\fov_waves.tga",
+local PLAYER_FOV_STYLES = {
+    soft = {
+        under = {
+            texture = "Interface\\AddOns\\BattleMaps\\Media\\fov_soft.tga",
+            blendMode = "BLEND",
+            aspect = 1,
+        },
+    },
+    waves = {
+        under = {
+            texture = "Interface\\AddOns\\BattleMaps\\Media\\fov_waves.tga",
+            blendMode = "BLEND",
+            aspect = 1,
+        },
+    },
+    spotlight = {
+        under = {
+            texture = "Interface\\AddOns\\BattleMaps\\Media\\fov_spotlight.tga",
+            blendMode = "BLEND",
+            aspect = 1,
+            alphaSetting = "playerFovSpotlightAlpha",
+        },
+        arc = {
+            texture = "Interface\\AddOns\\BattleMaps\\Media\\fov_arc.tga",
+            blendMode = "ADD",
+            aspect = 1,
+            alphaSetting = "playerFovArcAlpha",
+        },
+        beam = {
+            texture = "Interface\\AddOns\\BattleMaps\\Media\\fov_beam.tga",
+            blendMode = "ADD",
+            aspect = 1,
+            alphaSetting = "playerFovBeamAlpha",
+        },
+    },
 }
+local PLAYER_FOV_LAYER_ORDER = { "under", "arc", "beam" }
 
 local PLAYER_FOV_SUBLEVEL = 1
 local PLAYER_PIN_SUBLEVEL = 5
@@ -41,8 +74,8 @@ local TEAM_SPEC_ICON_SUBLEVEL = 10
 -- fills. Normally the player arrow sits above the complete teammate stack. When
 -- "Exclude player arrow" is enabled, it moves beneath the teammate layers so
 -- deliberately overlapping pins remain readable.
--- The FoV uses a separate background layer below the map artwork. The legacy
--- offset remains as a safe fallback if that layer is unavailable.
+-- FoV passes use dedicated under-map, above-map, and pin-layer parents. The
+-- pin-layer offset places Beam above stationary objectives and below unit pins.
 local PLAYER_FOV_FRAME_LEVEL_OFFSET = 57
 local PLAYER_BEHIND_TEAM_FRAME_LEVEL_OFFSET = 58
 local TEAM_BORDER_FRAME_LEVEL_OFFSET = 59
@@ -774,7 +807,12 @@ end
 
 function Pins:GetPlayerFovStyle(pinConfig)
     local style = pinConfig and pinConfig.playerFovStyle or "none"
-    return PLAYER_FOV_TEXTURES[style] and style or "none"
+    return PLAYER_FOV_STYLES[style] and style or "none"
+end
+
+function Pins:GetPlayerFovLayerAppearance(pinConfig, layer)
+    local style = PLAYER_FOV_STYLES[self:GetPlayerFovStyle(pinConfig)]
+    return style and style[layer] or nil
 end
 
 function Pins:GetPlayerFovSize(pinConfig, zoomScale)
@@ -792,6 +830,50 @@ function Pins:GetPlayerFovAlpha(pinConfig)
         0.10,
         1.00
     )
+end
+
+function Pins:GetPlayerFovLayerAlpha(pinConfig, layer)
+    local appearance = self:GetPlayerFovLayerAppearance(pinConfig, layer)
+    if not appearance then return 0 end
+
+    local multiplier = 1
+    if appearance.alphaSetting then
+        multiplier = BattleMaps.Clamp(
+            tonumber(pinConfig and pinConfig[appearance.alphaSetting]) or 1,
+            0,
+            1
+        )
+    end
+    return BattleMaps.Clamp(self:GetPlayerFovAlpha(pinConfig) * multiplier, 0, 1)
+end
+
+local function ConfigurePlayerFovTextureRegion(region, appearance)
+    if not region or not appearance or type(region.GetTexture) ~= "function" then return end
+    local texture = region:GetTexture()
+    if type(texture) ~= "string" then return end
+    if texture:lower():gsub("\\", "/") ~= appearance.texture:lower():gsub("\\", "/") then return end
+
+    -- Do not touch rotation or texture coordinates here; UnitPositionFrame
+    -- owns those values while following the player's facing.
+    if region.SetBlendMode then region:SetBlendMode(appearance.blendMode or "BLEND") end
+end
+
+function Pins:ConfigurePlayerFovFrameTextures(frame, appearance)
+    if not frame or not appearance then return end
+    if type(frame.GetRegions) == "function" then
+        for _, region in ipairs({ frame:GetRegions() }) do
+            ConfigurePlayerFovTextureRegion(region, appearance)
+        end
+    end
+    if type(frame.GetChildren) == "function" then
+        for _, child in ipairs({ frame:GetChildren() }) do
+            if type(child.GetRegions) == "function" then
+                for _, region in ipairs({ child:GetRegions() }) do
+                    ConfigurePlayerFovTextureRegion(region, appearance)
+                end
+            end
+        end
+    end
 end
 
 function Pins:ShouldRenderLivePlayerPosition()
@@ -816,9 +898,10 @@ function Pins:UpdateSmoothTestPlayerFacing()
     end
 
     local rotation = self:GetPlayerFacingRotation()
-    local fovFrame = self.testFovFrame
-    if fovFrame and fovFrame:IsShown() and fovFrame.texture and fovFrame.texture.SetRotation then
-        fovFrame.texture:SetRotation(rotation)
+    for _, fovFrame in pairs(self.testFovFrames or {}) do
+        if fovFrame:IsShown() and fovFrame.texture and fovFrame.texture.SetRotation then
+            fovFrame.texture:SetRotation(rotation)
+        end
     end
 
     local playerFrame = self.testPlayerFacingFrame
@@ -842,8 +925,10 @@ function Pins:UpdatePlayerFovFramePeriodic(frame)
     -- selectable player-pin colour mode.
     local mapID = self.unitConfigMapID or (BattleMaps.MapFrame and BattleMaps.MapFrame.currentMapID)
     local pinConfig = BattleMaps.Database:GetUnitsConfig(mapID)
-    frame:SetUnitColor("player", 1, 1, 1, self:GetPlayerFovAlpha(pinConfig))
-    self:NormalizeUnitFrameCustomTextures(frame)
+    local layer = frame.BattleMapsFovLayer or "under"
+    local appearance = self:GetPlayerFovLayerAppearance(pinConfig, layer)
+    frame:SetUnitColor("player", 1, 1, 1, self:GetPlayerFovLayerAlpha(pinConfig, layer))
+    self:ConfigurePlayerFovFrameTextures(frame, appearance)
 end
 
 function Pins:UpdatePlayerFovFrameFull(frame)
@@ -855,24 +940,24 @@ function Pins:UpdatePlayerFovFrameFull(frame)
     end
     local mapID = self.unitConfigMapID or (BattleMaps.MapFrame and BattleMaps.MapFrame.currentMapID)
     local pinConfig = BattleMaps.Database:GetUnitsConfig(mapID)
-    local fovStyle = self:GetPlayerFovStyle(pinConfig)
-    local fovTexture = PLAYER_FOV_TEXTURES[fovStyle]
-    if fovTexture then
+    local layer = frame.BattleMapsFovLayer or "under"
+    local appearance = self:GetPlayerFovLayerAppearance(pinConfig, layer)
+    if appearance then
         local r, g, b = 1, 1, 1
-        local alpha = self:GetPlayerFovAlpha(pinConfig)
+        local alpha = self:GetPlayerFovLayerAlpha(pinConfig, layer)
         local size = self.unitFovSize or self:GetPlayerFovSize(pinConfig, self:GetPinZoomScale())
         frame:AddUnit(
             "player",
-            fovTexture,
+            appearance.texture,
             size,
-            size,
+            size * (appearance.aspect or 1),
             r, g, b, alpha,
             PLAYER_FOV_SUBLEVEL,
             true
         )
     end
     frame:FinalizeUnits()
-    self:NormalizeUnitFrameCustomTextures(frame)
+    self:ConfigurePlayerFovFrameTextures(frame, appearance)
     frame.needsFullUpdate = false
 end
 
@@ -2124,42 +2209,42 @@ function Pins:HideTeamStackTestPreview()
     self:HideTestFov()
 end
 
-function Pins:GetPlayerFovRenderParent()
+function Pins:GetPlayerFovLayerRenderParent(layer)
     local mapFrame = BattleMaps.MapFrame
-    return (mapFrame and mapFrame.fovLayer) or self.parent
+    if layer == "under" then
+        return (mapFrame and mapFrame.fovLayer) or self.parent
+    end
+    if layer == "arc" then
+        return (mapFrame and mapFrame.fovOverlayLayer) or self.parent
+    end
+    return self.parent
 end
 
-function Pins:GetPlayerFovRenderFrameLevel()
-    local renderParent = self:GetPlayerFovRenderParent()
+function Pins:GetPlayerFovLayerFrameLevel(layer)
+    local renderParent = self:GetPlayerFovLayerRenderParent(layer)
     if renderParent and renderParent ~= self.parent then
         return renderParent:GetFrameLevel() + 1
     end
     return self.parent:GetFrameLevel() + PLAYER_FOV_FRAME_LEVEL_OFFSET
 end
 
-function Pins:AcquireTestFov()
-    if self.testFovFrame then return self.testFovFrame end
+function Pins:AcquireTestFovLayer(layer)
+    self.testFovFrames = self.testFovFrames or {}
+    if self.testFovFrames[layer] then return self.testFovFrames[layer] end
 
-    local frame = CreateFrame("Frame", nil, self:GetPlayerFovRenderParent())
-    frame:SetFrameLevel(self:GetPlayerFovRenderFrameLevel())
+    local frame = CreateFrame("Frame", nil, self:GetPlayerFovLayerRenderParent(layer))
+    frame.BattleMapsFovLayer = layer
+    frame:SetFrameLevel(self:GetPlayerFovLayerFrameLevel(layer))
     frame:EnableMouse(false)
     local texture = frame:CreateTexture(nil, "ARTWORK")
     texture:SetAllPoints()
-    texture:SetBlendMode("BLEND")
     frame.texture = texture
     frame:Hide()
-    self.testFovFrame = frame
+    self.testFovFrames[layer] = frame
     return frame
 end
 
 function Pins:RenderTestFov(pinConfig, x, y, size, canvasWidth, canvasHeight)
-    local fovStyle = self:GetPlayerFovStyle(pinConfig)
-    local fovTexture = PLAYER_FOV_TEXTURES[fovStyle]
-    if not fovTexture then
-        self:HideTestFov()
-        return
-    end
-
     local mapFrame = BattleMaps.MapFrame
     local canvas = mapFrame and mapFrame.canvas
     if not canvas then
@@ -2167,22 +2252,31 @@ function Pins:RenderTestFov(pinConfig, x, y, size, canvasWidth, canvasHeight)
         return
     end
 
-    local frame = self:AcquireTestFov()
-    frame:SetSize(size, size)
-    frame:SetFrameLevel(self:GetPlayerFovRenderFrameLevel())
-    frame:ClearAllPoints()
-    frame:SetPoint("CENTER", canvas, "TOPLEFT", x * canvasWidth, -(y * canvasHeight))
-    frame.texture:SetTexture(fovTexture)
-    frame.texture:SetVertexColor(1, 1, 1, 1)
-    frame.texture:SetAlpha(self:GetPlayerFovAlpha(pinConfig))
-    if frame.texture.SetRotation then
-        frame.texture:SetRotation(self:GetPlayerFacingRotation())
+    for _, layer in ipairs(PLAYER_FOV_LAYER_ORDER) do
+        local appearance = self:GetPlayerFovLayerAppearance(pinConfig, layer)
+        local existingFrame = self.testFovFrames and self.testFovFrames[layer]
+        if appearance then
+            local frame = self:AcquireTestFovLayer(layer)
+            frame:SetSize(size, size * (appearance.aspect or 1))
+            frame:SetFrameLevel(self:GetPlayerFovLayerFrameLevel(layer))
+            frame:ClearAllPoints()
+            frame:SetPoint("CENTER", canvas, "TOPLEFT", x * canvasWidth, -(y * canvasHeight))
+            frame.texture:SetTexture(appearance.texture)
+            frame.texture:SetBlendMode(appearance.blendMode or "BLEND")
+            frame.texture:SetVertexColor(1, 1, 1, 1)
+            frame.texture:SetAlpha(self:GetPlayerFovLayerAlpha(pinConfig, layer))
+            if frame.texture.SetRotation then
+                frame.texture:SetRotation(self:GetPlayerFacingRotation())
+            end
+            frame:Show()
+        elseif existingFrame then
+            existingFrame:Hide()
+        end
     end
-    frame:Show()
 end
 
 function Pins:HideTestFov()
-    if self.testFovFrame then self.testFovFrame:Hide() end
+    for _, frame in pairs(self.testFovFrames or {}) do frame:Hide() end
 end
 
 function Pins:HideTeamStackUnitFrames()
@@ -2213,7 +2307,13 @@ function Pins:SetLivePlayerUnitFramesEnabled(enabled)
     if self.livePlayerUnitFramesEnabled == enabled then return false end
     self.livePlayerUnitFramesEnabled = enabled
 
-    for _, frame in ipairs({ self.playerTeamBorderFrame, self.playerFovFrame, self.playerFrame }) do
+    for _, frame in ipairs({
+        self.playerTeamBorderFrame,
+        self.playerFovFrame,
+        self.playerFovArcFrame,
+        self.playerFovBeamFrame,
+        self.playerFrame,
+    }) do
         if frame then
             pcall(frame.SetShouldShowUnits, frame, "player", enabled)
             pcall(frame.SetNeedsFullUpdate, frame)
@@ -2233,6 +2333,8 @@ function Pins:SuppressLiveUnitFramesForPreview()
         self.teamSpecIconFrame,
         self.playerTeamBorderFrame,
         self.playerFovFrame,
+        self.playerFovArcFrame,
+        self.playerFovBeamFrame,
         self.playerFrame,
     }) do
         if frame then
@@ -2244,7 +2346,13 @@ function Pins:SuppressLiveUnitFramesForPreview()
     self:HideTeamStackUnitFrames()
     if self.unitFrame then self:SetNativeGroupPinsVisible(self.unitFrame, true) end
     self:SetLivePlayerUnitFramesEnabled(false)
-    for _, frame in ipairs({ self.playerTeamBorderFrame, self.playerFovFrame, self.playerFrame }) do
+    for _, frame in ipairs({
+        self.playerTeamBorderFrame,
+        self.playerFovFrame,
+        self.playerFovArcFrame,
+        self.playerFovBeamFrame,
+        self.playerFrame,
+    }) do
         if frame then
             pcall(frame.SetUnitColor, frame, "player", 1, 1, 1, 0)
             pcall(frame.SetNeedsFullUpdate, frame)
@@ -3315,29 +3423,36 @@ function Pins:InitializeUnitFrames(parent)
     playerTeamBorderFrame:SetAlpha(0)
     playerTeamBorderFrame:Show()
 
-    local playerFovFrame = CreateFrame(
-        "UnitPositionFrame",
-        "BattleMapsPlayerFovFrame",
-        self:GetPlayerFovRenderParent(),
-        "UnitPositionFrameTemplate"
-    )
-    self.playerFovFrame = playerFovFrame
-    playerFovFrame.BattleMapsPins = self
-    playerFovFrame.UpdateFull = function(frame)
-        frame.BattleMapsPins:UpdatePlayerFovFrameFull(frame)
+    local function CreatePlayerFovFrame(layer, frameName)
+        local fovFrame = CreateFrame(
+            "UnitPositionFrame",
+            frameName,
+            self:GetPlayerFovLayerRenderParent(layer),
+            "UnitPositionFrameTemplate"
+        )
+        fovFrame.BattleMapsPins = self
+        fovFrame.BattleMapsFovLayer = layer
+        fovFrame.UpdateFull = function(frame)
+            frame.BattleMapsPins:UpdatePlayerFovFrameFull(frame)
+        end
+        fovFrame.UpdatePeriodic = function(frame)
+            frame.BattleMapsPins:UpdatePlayerFovFramePeriodic(frame)
+        end
+        fovFrame:SetFrameLevel(self:GetPlayerFovLayerFrameLevel(layer))
+        fovFrame:SetPinSubLevel("player", PLAYER_FOV_SUBLEVEL)
+        fovFrame:SetUseClassColor("player", false)
+        fovFrame:SetShouldShowUnits("player", false)
+        fovFrame:SetShouldShowUnits("party", false)
+        fovFrame:SetShouldShowUnits("raid", false)
+        fovFrame:SetNeedsPeriodicUpdate(true)
+        fovFrame:SetAlpha(0)
+        fovFrame:Show()
+        return fovFrame
     end
-    playerFovFrame.UpdatePeriodic = function(frame)
-        frame.BattleMapsPins:UpdatePlayerFovFramePeriodic(frame)
-    end
-    playerFovFrame:SetFrameLevel(self:GetPlayerFovRenderFrameLevel())
-    playerFovFrame:SetPinSubLevel("player", PLAYER_FOV_SUBLEVEL)
-    playerFovFrame:SetUseClassColor("player", false)
-    playerFovFrame:SetShouldShowUnits("player", false)
-    playerFovFrame:SetShouldShowUnits("party", false)
-    playerFovFrame:SetShouldShowUnits("raid", false)
-    playerFovFrame:SetNeedsPeriodicUpdate(true)
-    playerFovFrame:SetAlpha(0)
-    playerFovFrame:Show()
+
+    self.playerFovFrame = CreatePlayerFovFrame("under", "BattleMapsPlayerFovFrame")
+    self.playerFovArcFrame = CreatePlayerFovFrame("arc", "BattleMapsPlayerFovArcFrame")
+    self.playerFovBeamFrame = CreatePlayerFovFrame("beam", "BattleMapsPlayerFovBeamFrame")
 
     local playerFrame = CreateFrame(
         "UnitPositionFrame",
@@ -3377,7 +3492,9 @@ function Pins:LayoutUnitFrame()
         { frame = self.healerOverlayFrame, level = HEALER_OVERLAY_FRAME_LEVEL_OFFSET, key = "healerOverlayFrameAnchored" },
         { frame = self.teamSpecIconFrame, level = TEAM_SPEC_ICON_FRAME_LEVEL_OFFSET, key = "teamSpecIconFrameAnchored", specOffset = true },
         { frame = self.playerTeamBorderFrame, level = self.playerTeamBorderFrameLevelOffset or PLAYER_TEAM_BORDER_FRAME_LEVEL_OFFSET, key = "playerTeamBorderFrameAnchored" },
-        { frame = self.playerFovFrame, level = PLAYER_FOV_FRAME_LEVEL_OFFSET, key = "playerFovFrameAnchored", fovLayer = true },
+        { frame = self.playerFovFrame, key = "playerFovFrameAnchored", fovLayer = "under" },
+        { frame = self.playerFovArcFrame, key = "playerFovArcFrameAnchored", fovLayer = "arc" },
+        { frame = self.playerFovBeamFrame, key = "playerFovBeamFrameAnchored", fovLayer = "beam" },
         { frame = self.playerFrame, level = self.playerArrowFrameLevelOffset or PLAYER_FRAME_LEVEL_OFFSET, key = "playerFrameAnchored" },
     }
 
@@ -3401,7 +3518,7 @@ function Pins:LayoutUnitFrame()
                 frame.BattleMapsAnchorOffsetX = desiredX
                 self[info.key] = true
             end
-            frame:SetFrameLevel(info.fovLayer and self:GetPlayerFovRenderFrameLevel()
+            frame:SetFrameLevel(info.fovLayer and self:GetPlayerFovLayerFrameLevel(info.fovLayer)
                 or (self.parent:GetFrameLevel() + info.level))
         end
     end
@@ -3450,7 +3567,17 @@ function Pins:RefreshUnits(forceFullUpdate)
         self:HideTeamStackOverlay()
         self:HideTeamStackUnitFrames()
         if unitFrame then self:SetNativeGroupPinsVisible(unitFrame, true) end
-        for _, frame in ipairs({ self.teamBorderFrame, self.unitFrame, self.healerOverlayFrame, self.teamSpecIconFrame, self.playerTeamBorderFrame, self.playerFovFrame, self.playerFrame }) do
+        for _, frame in ipairs({
+            self.teamBorderFrame,
+            self.unitFrame,
+            self.healerOverlayFrame,
+            self.teamSpecIconFrame,
+            self.playerTeamBorderFrame,
+            self.playerFovFrame,
+            self.playerFovArcFrame,
+            self.playerFovBeamFrame,
+            self.playerFrame,
+        }) do
             if frame then
                 frame:SetAlpha(0)
                 ConfigureTeamTooltipHitTesting(frame, false)
@@ -3461,7 +3588,13 @@ function Pins:RefreshUnits(forceFullUpdate)
 
     -- Older running builds may have hidden these frames while suppressing the
     -- Test Mode duplicate. Repair that state before an ordinary map refresh.
-    for _, frame in ipairs({ self.playerTeamBorderFrame, self.playerFovFrame, self.playerFrame }) do
+    for _, frame in ipairs({
+        self.playerTeamBorderFrame,
+        self.playerFovFrame,
+        self.playerFovArcFrame,
+        self.playerFovBeamFrame,
+        self.playerFrame,
+    }) do
         if frame and not frame:IsShown() then
             frame:Show()
             forceFullUpdate = true
@@ -3515,7 +3648,17 @@ function Pins:RefreshUnits(forceFullUpdate)
         self.unitMapID = unitMapID
         self.unitConfigMapID = mapID
 
-        for _, frame in ipairs({ self.teamBorderFrame, self.unitFrame, self.healerOverlayFrame, self.teamSpecIconFrame, self.playerTeamBorderFrame, self.playerFovFrame, self.playerFrame }) do
+        for _, frame in ipairs({
+            self.teamBorderFrame,
+            self.unitFrame,
+            self.healerOverlayFrame,
+            self.teamSpecIconFrame,
+            self.playerTeamBorderFrame,
+            self.playerFovFrame,
+            self.playerFovArcFrame,
+            self.playerFovBeamFrame,
+            self.playerFrame,
+        }) do
             if frame then
                 if not frame:IsShown() then frame:Show() end
                 frame:SetUiMapID(unitMapID)
@@ -3550,7 +3693,9 @@ function Pins:RefreshUnits(forceFullUpdate)
     if self.unitFovSize ~= fovSize or self.unitFovStyle ~= fovStyle then
         self.unitFovSize = fovSize
         self.unitFovStyle = fovStyle
-        if self.playerFovFrame then self.playerFovFrame:SetPinSize("player", fovSize) end
+        for _, frame in ipairs({ self.playerFovFrame, self.playerFovArcFrame, self.playerFovBeamFrame }) do
+            if frame then frame:SetPinSize("player", fovSize) end
+        end
         forceFullUpdate = true
     end
     if self.unitTeamSize ~= teamSize then
@@ -3630,6 +3775,8 @@ function Pins:RefreshUnits(forceFullUpdate)
     ConfigureTeamTooltipHitTesting(self.teamSpecIconFrame, false)
     ConfigureTeamTooltipHitTesting(self.playerTeamBorderFrame, false)
     ConfigureTeamTooltipHitTesting(self.playerFovFrame, false)
+    ConfigureTeamTooltipHitTesting(self.playerFovArcFrame, false)
+    ConfigureTeamTooltipHitTesting(self.playerFovBeamFrame, false)
     ConfigureTeamTooltipHitTesting(self.playerFrame, false)
     if self:SetNativeGroupPinsVisible(unitFrame, showNativeTeam) then forceFullUpdate = true end
     if not useTeamStackUnitFrameFallback then
@@ -3639,7 +3786,17 @@ function Pins:RefreshUnits(forceFullUpdate)
     end
 
     if forceFullUpdate then
-        for _, frame in ipairs({ self.teamBorderFrame, self.unitFrame, self.healerOverlayFrame, self.teamSpecIconFrame, self.playerTeamBorderFrame, self.playerFovFrame, self.playerFrame }) do
+        for _, frame in ipairs({
+            self.teamBorderFrame,
+            self.unitFrame,
+            self.healerOverlayFrame,
+            self.teamSpecIconFrame,
+            self.playerTeamBorderFrame,
+            self.playerFovFrame,
+            self.playerFovArcFrame,
+            self.playerFovBeamFrame,
+            self.playerFrame,
+        }) do
             if frame then frame:SetNeedsFullUpdate() end
         end
         for _, pingFrame in ipairs(self.unitPingFrames) do
@@ -3653,15 +3810,22 @@ function Pins:RefreshUnits(forceFullUpdate)
         end
     end
 
-    -- The FoV stays beneath the map artwork on its dedicated background layer.
-    -- The player frame stays above every teammate layer in both native and
-    -- stacked modes.
-    if self.playerFovFrame then
-        local showFov = renderLivePlayerPosition and fovStyle ~= "none"
-        self.playerFovFrame:SetAlpha(showFov and 1 or 0)
-        self.playerFovFrame:UpdatePlayerPins()
-        if showFov then
-            self:NormalizeUnitFrameCustomTextures(self.playerFovFrame)
+    -- FoV passes occupy dedicated under-map, above-map, and pin-layer levels.
+    -- The player marker remains above all three passes.
+    for _, info in ipairs({
+        { layer = "under", frame = self.playerFovFrame },
+        { layer = "arc", frame = self.playerFovArcFrame },
+        { layer = "beam", frame = self.playerFovBeamFrame },
+    }) do
+        local frame = info.frame
+        if frame then
+            local appearance = self:GetPlayerFovLayerAppearance(pinConfig, info.layer)
+            local showFov = renderLivePlayerPosition and appearance ~= nil
+            frame:SetAlpha(showFov and 1 or 0)
+            frame:UpdatePlayerPins()
+            if showFov then
+                self:ConfigurePlayerFovFrameTextures(frame, appearance)
+            end
         end
     end
     if self.playerTeamBorderFrame then

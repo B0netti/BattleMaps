@@ -1538,9 +1538,15 @@ function Options:Refresh()
             tonumber(unitsSettings.teamMemberPinSize) or 12
         ))
     end
-    local fovEnabled = unitsSettings.playerFovStyle == "soft" or unitsSettings.playerFovStyle == "waves"
+    local fovEnabled = unitsSettings.playerFovStyle == "soft"
+        or unitsSettings.playerFovStyle == "waves"
+        or unitsSettings.playerFovStyle == "spotlight"
     SetControlEnabled(self.playerFovScaleSlider, fovEnabled)
     SetControlEnabled(self.playerFovAlphaSlider, fovEnabled)
+    local spotlightEnabled = unitsSettings.playerFovStyle == "spotlight"
+    SetControlEnabled(self.playerFovSpotlightAlphaSlider, spotlightEnabled)
+    SetControlEnabled(self.playerFovBeamAlphaSlider, spotlightEnabled)
+    SetControlEnabled(self.playerFovArcAlphaSlider, spotlightEnabled)
     local teamStackingEnabled = unitsSettings.stackTeamPins ~= false
     SetControlEnabled(self.excludePlayerArrowFromStackCheck, teamStackingEnabled)
     SetControlEnabled(self.teamPinStackOverlapSlider, teamStackingEnabled)

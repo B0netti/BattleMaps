@@ -4,7 +4,7 @@ BattleMaps is a World of Warcraft Retail PvP addon that provides a configurable 
 
 ## Current status
 
-BattleMaps is under active development. The current source version is **2.6.46** and targets World of Warcraft Retail interface **120007**.
+BattleMaps is under active development. The current source version is **2.6.47** and targets World of Warcraft Retail interface **120007**.
 
 ## Highlights
 

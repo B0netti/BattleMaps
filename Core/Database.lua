@@ -20,6 +20,9 @@ local PLAYER_PIN_DEFAULTS = {
     playerFovStyle = "none",
     playerFovScale = 1.00,
     playerFovAlpha = 0.65,
+    playerFovSpotlightAlpha = 1.00,
+    playerFovBeamAlpha = 1.00,
+    playerFovArcAlpha = 1.00,
     teamMemberPinSize = PIN_DEFAULTS.teamMemberPinSize,
     healerPinSize = PIN_DEFAULTS.healerPinSize,
     combatTeamPinScale = PIN_DEFAULTS.combatTeamPinScale,
@@ -175,6 +178,9 @@ local ROOT_DEFAULTS = {
     playerFovStyle = PLAYER_PIN_DEFAULTS.playerFovStyle,
     playerFovScale = PLAYER_PIN_DEFAULTS.playerFovScale,
     playerFovAlpha = PLAYER_PIN_DEFAULTS.playerFovAlpha,
+    playerFovSpotlightAlpha = PLAYER_PIN_DEFAULTS.playerFovSpotlightAlpha,
+    playerFovBeamAlpha = PLAYER_PIN_DEFAULTS.playerFovBeamAlpha,
+    playerFovArcAlpha = PLAYER_PIN_DEFAULTS.playerFovArcAlpha,
     teamMemberPinSize = PIN_DEFAULTS.teamMemberPinSize,
     healerPinSize = PIN_DEFAULTS.healerPinSize,
     combatTeamPinScale = PIN_DEFAULTS.combatTeamPinScale,
@@ -913,7 +919,7 @@ local function NormalizePlayerFovSettings(settings)
             or PLAYER_PIN_DEFAULTS.playerFovAlpha
     end
 
-    settings.playerFovStyle = ({ none = true, soft = true, waves = true })[settings.playerFovStyle]
+    settings.playerFovStyle = ({ none = true, soft = true, waves = true, spotlight = true })[settings.playerFovStyle]
         and settings.playerFovStyle or PLAYER_PIN_DEFAULTS.playerFovStyle
     settings.playerFovScale = BattleMaps.Clamp(
         tonumber(settings.playerFovScale) or PLAYER_PIN_DEFAULTS.playerFovScale,
@@ -923,6 +929,21 @@ local function NormalizePlayerFovSettings(settings)
     settings.playerFovAlpha = BattleMaps.Clamp(
         tonumber(settings.playerFovAlpha) or PLAYER_PIN_DEFAULTS.playerFovAlpha,
         0.10,
+        1.00
+    )
+    settings.playerFovSpotlightAlpha = BattleMaps.Clamp(
+        tonumber(settings.playerFovSpotlightAlpha) or PLAYER_PIN_DEFAULTS.playerFovSpotlightAlpha,
+        0.00,
+        1.00
+    )
+    settings.playerFovBeamAlpha = BattleMaps.Clamp(
+        tonumber(settings.playerFovBeamAlpha) or PLAYER_PIN_DEFAULTS.playerFovBeamAlpha,
+        0.00,
+        1.00
+    )
+    settings.playerFovArcAlpha = BattleMaps.Clamp(
+        tonumber(settings.playerFovArcAlpha) or PLAYER_PIN_DEFAULTS.playerFovArcAlpha,
+        0.00,
         1.00
     )
     settings.playerFovStyleVersion = 1
@@ -1681,6 +1702,10 @@ function Database:ResetPlayerPins(mapID)
     target.playerFovStyle = source.playerFovStyle or PLAYER_PIN_DEFAULTS.playerFovStyle
     target.playerFovScale = source.playerFovScale or PLAYER_PIN_DEFAULTS.playerFovScale
     target.playerFovAlpha = source.playerFovAlpha or PLAYER_PIN_DEFAULTS.playerFovAlpha
+    target.playerFovSpotlightAlpha = source.playerFovSpotlightAlpha
+        or PLAYER_PIN_DEFAULTS.playerFovSpotlightAlpha
+    target.playerFovBeamAlpha = source.playerFovBeamAlpha or PLAYER_PIN_DEFAULTS.playerFovBeamAlpha
+    target.playerFovArcAlpha = source.playerFovArcAlpha or PLAYER_PIN_DEFAULTS.playerFovArcAlpha
     target.playerFovStyleVersion = 1
     target.showPlayerVisionCone = nil
     target.playerVisionConeScale = nil
