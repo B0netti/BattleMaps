@@ -74,11 +74,9 @@ local TEAM_SPEC_ICON_SUBLEVEL = 10
 -- fills. Normally the player arrow sits above the complete teammate stack. When
 -- "Exclude player arrow" is enabled, it moves beneath the teammate layers so
 -- deliberately overlapping pins remain readable.
--- FoV passes use dedicated under-map, above-map, and pin-layer parents. Beam
--- sits above the complete team-pin stack; the normal player marker remains
--- above it, while Exclude player pin retains its intentional behind-team rule.
+-- FoV passes use dedicated under-map, above-map, and pin-layer parents. The
+-- pin-layer offset places Beam above stationary objectives and below unit pins.
 local PLAYER_FOV_FRAME_LEVEL_OFFSET = 57
-local PLAYER_FOV_BEAM_FRAME_LEVEL_OFFSET = 67
 local PLAYER_BEHIND_TEAM_FRAME_LEVEL_OFFSET = 58
 local TEAM_BORDER_FRAME_LEVEL_OFFSET = 59
 local UNIT_FRAME_LEVEL_OFFSET = 60
@@ -89,8 +87,8 @@ local TEAM_STACK_HEALER_OVERLAY_FRAME_LEVEL_OFFSET = 64
 local TEAM_SPEC_ICON_FRAME_LEVEL_OFFSET = 65
 local TEAM_STACK_SPEC_ICON_FRAME_LEVEL_OFFSET = 66
 local TEAM_STACK_FRAME_LEVEL_OFFSET = 63
-local PLAYER_FRAME_LEVEL_OFFSET = 69
-local PLAYER_TEAM_BORDER_FRAME_LEVEL_OFFSET = 68
+local PLAYER_FRAME_LEVEL_OFFSET = 67
+local PLAYER_TEAM_BORDER_FRAME_LEVEL_OFFSET = 66
 local TEAM_DEATH_MARKER_FRAME_LEVEL_OFFSET = 68
 local MAX_TEAM_STACK_UNIT_FRAMES = 16
 local TEAM_DEATH_MARKER_DURATION = 10.00
@@ -2244,9 +2242,6 @@ function Pins:GetPlayerFovLayerFrameLevel(layer)
     local renderParent = self:GetPlayerFovLayerRenderParent(layer)
     if renderParent and renderParent ~= self.parent then
         return renderParent:GetFrameLevel() + 1
-    end
-    if layer == "beam" then
-        return self.parent:GetFrameLevel() + PLAYER_FOV_BEAM_FRAME_LEVEL_OFFSET
     end
     return self.parent:GetFrameLevel() + PLAYER_FOV_FRAME_LEVEL_OFFSET
 end

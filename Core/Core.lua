@@ -2,8 +2,8 @@ local addonName, BattleMaps = ...
 
 _G.BattleMaps = BattleMaps
 BattleMaps.addonName = addonName
-BattleMaps.VERSION = "2.6.49"
-BattleMaps.BUILD = "2.6.49-fov-map-scale"
+BattleMaps.VERSION = "2.6.50"
+BattleMaps.BUILD = "2.6.50-beam-below-units"
 
 BattleMaps.COLORS = {
     red = { 0.77, 0.17, 0.16 },
