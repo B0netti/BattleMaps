@@ -98,6 +98,10 @@ local TEAM_STATE_POLL_INTERVAL = 0.15
 local TEAM_TOOLTIP_POLL_INTERVAL = 0.02
 local TEAM_SPEC_INSPECT_INTERVAL = 0.75
 local PLAYER_FOV_BASE_SIZE = 96
+-- The default 420 px map frame leaves a 414 px-wide viewport after its border.
+-- FoV artwork represents map area rather than a readability-sized icon, so
+-- keep its footprint proportional to the fully zoomed canvas width.
+local PLAYER_FOV_REFERENCE_CANVAS_WIDTH = 414
 -- These values use the visible alpha bounds of the shipped artwork rather
 -- than its source canvas dimensions. Arrow occupies about 58% of its canvas
 -- by geometric footprint and Compass about 40%, so this correction keeps both
@@ -817,13 +821,27 @@ function Pins:GetPlayerFovLayerAppearance(pinConfig, layer)
     return style and style[layer] or nil
 end
 
-function Pins:GetPlayerFovSize(pinConfig, zoomScale)
+function Pins:GetPlayerFovMapScale()
+    local mapFrame = BattleMaps.MapFrame
+    local canvas = mapFrame and mapFrame.canvas
+    local canvasWidth = canvas and canvas:GetWidth()
+    if canvasWidth and canvasWidth > 1 then
+        return BattleMaps.Clamp(canvasWidth / PLAYER_FOV_REFERENCE_CANVAS_WIDTH, 0.25, 16)
+    end
+
+    -- LayoutView normally establishes the canvas before pins refresh. Retain a
+    -- full-zoom fallback for the brief startup path where it has not done so.
+    local view = mapFrame and mapFrame.GetActiveView and mapFrame:GetActiveView()
+    return BattleMaps.Clamp(tonumber(view and view.customZoom) or 1, 1, 3)
+end
+
+function Pins:GetPlayerFovSize(pinConfig, mapScale)
     local scale = BattleMaps.Clamp(
         tonumber(pinConfig and pinConfig.playerFovScale) or 1.00,
         0.25,
         3.00
     )
-    return BattleMaps.Clamp(PLAYER_FOV_BASE_SIZE * scale * (zoomScale or 1), 24, 1024)
+    return BattleMaps.Clamp(PLAYER_FOV_BASE_SIZE * scale * (mapScale or 1), 24, 4096)
 end
 
 function Pins:GetPlayerFovAlpha(pinConfig)
@@ -947,7 +965,7 @@ function Pins:UpdatePlayerFovFrameFull(frame)
     if appearance then
         local r, g, b = 1, 1, 1
         local alpha = self:GetPlayerFovLayerAlpha(pinConfig, layer)
-        local size = self.unitFovSize or self:GetPlayerFovSize(pinConfig, self:GetPinZoomScale())
+        local size = self.unitFovSize or self:GetPlayerFovSize(pinConfig, self:GetPlayerFovMapScale())
         frame:AddUnit(
             "player",
             appearance.texture,
@@ -2053,7 +2071,7 @@ function Pins:RefreshTeamStackTestPreview()
     local playerSize = BattleMaps.Clamp((tonumber(pinConfig.playerArrowSize) or 22) * zoomScale, 12, 256)
     local playerAppearance = self:GetPlayerPinAppearance(pinConfig, playerSize, teamSize)
     local playerVisualSize = playerAppearance.borderSize or playerAppearance.size
-    local fovSize = self:GetPlayerFovSize(pinConfig, zoomScale)
+    local fovSize = self:GetPlayerFovSize(pinConfig, self:GetPlayerFovMapScale())
     local overlap = BattleMaps.Clamp(tonumber(pinConfig.teamPinStackOverlap) or 45, 0, 80)
     local step = BattleMaps.Clamp(teamSize * (1 - (overlap / 100)), 1, 80)
     local direction = pinConfig.teamPinStackDirection or "compact"
@@ -3639,7 +3657,7 @@ function Pins:RefreshUnits(forceFullUpdate)
     local playerSize = BattleMaps.Clamp((tonumber(pinConfig.playerArrowSize) or 22) * zoomScale, 12, 256)
     local playerAppearance = self:GetPlayerPinAppearance(pinConfig, playerSize, teamSize)
     local fovStyle = self:GetPlayerFovStyle(pinConfig)
-    local fovSize = self:GetPlayerFovSize(pinConfig, zoomScale)
+    local fovSize = self:GetPlayerFovSize(pinConfig, self:GetPlayerFovMapScale())
     local healerSettingSize = BattleMaps.Clamp(tonumber(pinConfig.healerPinSize) or 16, 0.50, 160)
     local metrics = self:GetTeamPinMetrics(
         teamSize,
