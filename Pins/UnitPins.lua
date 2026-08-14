@@ -14,7 +14,16 @@ local CUSTOM_TEAM_FILL_DOT_TEXTURE = "Interface\\AddOns\\BattleMaps\\Media\\team
 local CUSTOM_TEAM_FILL_WHITE_TEXTURE = "Interface\\AddOns\\BattleMaps\\Media\\team_fill_white.tga"
 local CUSTOM_HEALER_FILL_WHITE_TEXTURE = "Interface\\AddOns\\BattleMaps\\Media\\healer_fill_white.tga"
 local CUSTOM_HEALER_CROSS_TEXTURE = "Interface\\AddOns\\BattleMaps\\Media\\healer_cross.tga"
+local CUSTOM_HEALER_CROSS_BORDER_TEXTURE = "Interface\\AddOns\\BattleMaps\\Media\\healer_cross_border.tga"
 local CUSTOM_HEALER_COMBAT_CROSS_TEXTURE = "Interface\\AddOns\\BattleMaps\\Media\\healer_cross_combat.tga"
+
+-- The three layers are all authored on 64 px canvases, but their visible
+-- diameters differ because each has its own transparent padding. These ratios
+-- let the standalone healer background reproduce the rim thickness created by
+-- the normal team border/fill pair at every map zoom and border-size setting.
+local TEAM_PIN_VISIBLE_DIAMETER = 55
+local HEALER_CROSS_VISIBLE_DIAMETER = 38
+local HEALER_ICON_ONLY_BORDER_VISIBLE_DIAMETER = 60
 
 -- Previous single-layer media remain as graceful fallbacks while users replace
 -- files or when one of the new layered assets is absent.
@@ -74,22 +83,22 @@ local TEAM_SPEC_ICON_SUBLEVEL = 10
 -- fills. Normally the player arrow sits above the complete teammate stack. When
 -- "Exclude player arrow" is enabled, it moves beneath the teammate layers so
 -- deliberately overlapping pins remain readable.
--- FoV passes use dedicated under-map, above-map, and pin-layer parents. The
--- pin-layer offset places Beam above stationary objectives and below unit pins.
-local PLAYER_FOV_FRAME_LEVEL_OFFSET = 57
-local PLAYER_BEHIND_TEAM_FRAME_LEVEL_OFFSET = 58
+-- FoV passes use dedicated under-map, above-map, and pin-layer parents. Beam
+-- sits above every black unit backplate and below every coloured unit layer.
+local PLAYER_FOV_BEAM_FRAME_LEVEL_OFFSET = 61
 local TEAM_BORDER_FRAME_LEVEL_OFFSET = 59
-local UNIT_FRAME_LEVEL_OFFSET = 60
-local HEALER_OVERLAY_FRAME_LEVEL_OFFSET = 61
-local TEAM_STACK_BORDER_FRAME_LEVEL_OFFSET = 62
-local TEAM_STACK_UNIT_FRAME_LEVEL_OFFSET = 63
-local TEAM_STACK_HEALER_OVERLAY_FRAME_LEVEL_OFFSET = 64
-local TEAM_SPEC_ICON_FRAME_LEVEL_OFFSET = 65
-local TEAM_STACK_SPEC_ICON_FRAME_LEVEL_OFFSET = 66
-local TEAM_STACK_FRAME_LEVEL_OFFSET = 63
-local PLAYER_FRAME_LEVEL_OFFSET = 67
-local PLAYER_TEAM_BORDER_FRAME_LEVEL_OFFSET = 66
-local TEAM_DEATH_MARKER_FRAME_LEVEL_OFFSET = 68
+local TEAM_STACK_BORDER_FRAME_LEVEL_OFFSET = 60
+local PLAYER_BEHIND_TEAM_FRAME_LEVEL_OFFSET = 62
+local UNIT_FRAME_LEVEL_OFFSET = 63
+local TEAM_STACK_UNIT_FRAME_LEVEL_OFFSET = 64
+local HEALER_OVERLAY_FRAME_LEVEL_OFFSET = 65
+local TEAM_STACK_HEALER_OVERLAY_FRAME_LEVEL_OFFSET = 66
+local TEAM_SPEC_ICON_FRAME_LEVEL_OFFSET = 67
+local TEAM_STACK_SPEC_ICON_FRAME_LEVEL_OFFSET = 68
+local TEAM_STACK_FRAME_LEVEL_OFFSET = TEAM_STACK_UNIT_FRAME_LEVEL_OFFSET
+local PLAYER_FRAME_LEVEL_OFFSET = 69
+local PLAYER_TEAM_BORDER_FRAME_LEVEL_OFFSET = TEAM_STACK_BORDER_FRAME_LEVEL_OFFSET
+local TEAM_DEATH_MARKER_FRAME_LEVEL_OFFSET = 70
 local MAX_TEAM_STACK_UNIT_FRAMES = 16
 local TEAM_DEATH_MARKER_DURATION = 10.00
 local TEAM_STATE_POLL_INTERVAL = 0.15
@@ -371,6 +380,7 @@ local CUSTOM_UNIT_TEXTURES = {
     [CUSTOM_TEAM_FILL_WHITE_TEXTURE:lower():gsub("\\", "/")] = true,
     [CUSTOM_HEALER_FILL_WHITE_TEXTURE:lower():gsub("\\", "/")] = true,
     [CUSTOM_HEALER_CROSS_TEXTURE:lower():gsub("\\", "/")] = true,
+    [CUSTOM_HEALER_CROSS_BORDER_TEXTURE:lower():gsub("\\", "/")] = true,
     [CUSTOM_HEALER_COMBAT_CROSS_TEXTURE:lower():gsub("\\", "/")] = true,
     [CUSTOM_TEAM_PIN_TEXTURE:lower():gsub("\\", "/")] = true,
     [CUSTOM_TEAM_COMBAT_PIN_TEXTURE:lower():gsub("\\", "/")] = true,
@@ -422,6 +432,37 @@ function Pins:ShouldUseSplitHealerOverlay()
         and self:CustomTextureExists(CUSTOM_HEALER_CROSS_TEXTURE)
 end
 
+function Pins:GetTeamPinBorderScale(pinConfig)
+    return BattleMaps.Clamp(
+        tonumber(pinConfig and pinConfig.teamPinBorderScale) or 1.00,
+        0.50,
+        2.00
+    )
+end
+
+function Pins:GetHealerPinStyle(pinConfig)
+    local style = pinConfig and pinConfig.healerPinStyle
+    return ({ circle = true, icon = true, ignore = true })[style] and style or "icon"
+end
+
+function Pins:ShouldRenderHealerIcon(isHealer, pinConfig)
+    return isHealer == true and self:GetHealerPinStyle(pinConfig) ~= "ignore"
+end
+
+function Pins:ShouldRenderHealerCircle(isHealer, pinConfig)
+    return isHealer == true and self:GetHealerPinStyle(pinConfig) == "circle"
+end
+
+function Pins:ShouldUseHealerIconOverlay(pinConfig)
+    local style = self:GetHealerPinStyle(pinConfig)
+    if style == "ignore" or not self:ShouldUseLayeredTeamPins() then return false end
+    return self:ShouldUseSplitHealerOverlay()
+        or (style == "icon" and (
+            self:CustomTextureExists(CUSTOM_HEALER_CROSS_BORDER_TEXTURE)
+            or self:CustomTextureExists(CUSTOM_HEALER_PIN_TEXTURE)
+        ))
+end
+
 function Pins:GetTeamFillTexture(inCombat, useSolidOutOfCombat, isHealer)
     -- Healers always use their dedicated dot-free fill. Combat state is shown
     -- by healer_cross_combat.tga, so the ordinary team combat/dot treatment must
@@ -456,10 +497,32 @@ function Pins:GetHealerOverlayTexture(inCombat)
     return CUSTOM_HEALER_PIN_TEXTURE
 end
 
+function Pins:GetHealerIconOnlyBorderTexture()
+    if self:CustomTextureExists(CUSTOM_HEALER_CROSS_BORDER_TEXTURE) then
+        return CUSTOM_HEALER_CROSS_BORDER_TEXTURE
+    end
+    return nil
+end
+
+function Pins:GetHealerIconOnlyBorderSize(metrics)
+    metrics = type(metrics) == "table" and metrics or {}
+    local teamRimThickness = (
+        (tonumber(metrics.borderSize) or 12) - (tonumber(metrics.fillSize) or 12)
+    ) * (TEAM_PIN_VISIBLE_DIAMETER / 64)
+    local healerGlyphDiameter = (tonumber(metrics.healerSize) or 12)
+        * (HEALER_CROSS_VISIBLE_DIAMETER / 64)
+    return BattleMaps.Clamp(
+        (healerGlyphDiameter + teamRimThickness)
+            / (HEALER_ICON_ONLY_BORDER_VISIBLE_DIAMETER / 64),
+        3,
+        160
+    )
+end
+
 -- One texture family is used at every scale. The final rendered pin size drives
 -- the relative layer sizes: small competitive pins expose a light border, while
 -- larger/zoomed pins progressively expose more of the black backplate.
-function Pins:GetTeamPinMetrics(displayedSize, healerSettingSize, baseTeamSize, playerSize)
+function Pins:GetTeamPinMetrics(displayedSize, healerSettingSize, baseTeamSize, playerSize, borderScale)
     displayedSize = BattleMaps.Clamp(tonumber(displayedSize) or 12, 3, 128)
     baseTeamSize = BattleMaps.Clamp(tonumber(baseTeamSize) or displayedSize, 3, 128)
 
@@ -483,8 +546,8 @@ function Pins:GetTeamPinMetrics(displayedSize, healerSettingSize, baseTeamSize, 
 
     -- Healer Size is a relative glyph-control value, not an absolute rendered
     -- pixel size. A value of 16 is the neutral/default ratio. Do not divide by
-    -- the current team-pin size here: doing so cancels the border-size factor
-    -- below and leaves the cross nearly constant while team pins scale.
+    -- the current team-pin size here: doing so leaves the cross nearly
+    -- constant while team pins scale.
     local neutralHealerSetting = 16
     local healerControl = healerSettingSize / neutralHealerSetting
     healerControl = BattleMaps.Clamp(healerControl, 0.25, 3.00)
@@ -505,17 +568,18 @@ function Pins:GetTeamPinMetrics(displayedSize, healerSettingSize, baseTeamSize, 
         2.05
     )
 
-    local borderSize = displayedSize
-    local fillSize = BattleMaps.Clamp(borderSize * fillScale, 3, 160)
-    local healerSize = BattleMaps.Clamp(borderSize * healerTextureScale, 1, 192)
+    borderScale = BattleMaps.Clamp(tonumber(borderScale) or 1.00, 0.50, 2.00)
+    local borderSize = BattleMaps.Clamp(displayedSize * borderScale, 3, 160)
+    local fillSize = BattleMaps.Clamp(displayedSize * fillScale, 3, 160)
+    local healerSize = BattleMaps.Clamp(displayedSize * healerTextureScale, 1, 192)
     local resolvedPlayerSize = BattleMaps.Clamp(tonumber(playerSize) or 22, 8, 256)
 
     return {
         borderSize = borderSize,
         fillSize = fillSize,
         healerSize = healerSize,
-        collisionSize = borderSize,
-        playerAvoidRadius = (resolvedPlayerSize * 0.46) + (borderSize * 0.50) + 2,
+        collisionSize = math.max(borderSize, fillSize),
+        playerAvoidRadius = (resolvedPlayerSize * 0.46) + (math.max(borderSize, fillSize) * 0.50) + 2,
     }
 end
 
@@ -523,17 +587,50 @@ function Pins:GetHealerOverlaySize(baseSize, healerSize, baseTeamSize)
     return self:GetTeamPinMetrics(baseSize, healerSize, baseTeamSize).healerSize
 end
 
-function Pins:BuildTeamPinAppearance(isHealer, inCombat, displayedSize, healerSettingSize, baseTeamSize, useSolidOutOfCombat, r, g, b, healerR, healerG, healerB, specIcon, specName)
+function Pins:BuildTeamPinAppearance(isHealer, inCombat, displayedSize, healerSettingSize, baseTeamSize, useSolidOutOfCombat, r, g, b, healerR, healerG, healerB, specIcon, specName, pinConfig)
+    local healerStyle = self:GetHealerPinStyle(pinConfig)
+    local showHealerIcon = isHealer and healerStyle ~= "ignore"
+    local showHealerCircle = isHealer and healerStyle == "circle"
     if self:ShouldUseLayeredTeamPins() then
-        local metrics = self:GetTeamPinMetrics(displayedSize, healerSettingSize, baseTeamSize)
+        local metrics = self:GetTeamPinMetrics(
+            displayedSize,
+            healerSettingSize,
+            baseTeamSize,
+            nil,
+            pinConfig and pinConfig.teamPinBorderScale
+        )
+        if showHealerIcon and not showHealerCircle and self:ShouldUseHealerIconOverlay(pinConfig) then
+            local borderTexture = self:GetHealerIconOnlyBorderTexture()
+            local borderSize = borderTexture
+                and self:GetHealerIconOnlyBorderSize(metrics)
+                or metrics.healerSize
+            return {
+                kind = "team",
+                layered = true,
+                borderTexture = borderTexture,
+                borderSize = borderSize,
+                healerTexture = self:GetHealerOverlayTexture(inCombat),
+                healerSize = metrics.healerSize,
+                collisionSize = borderTexture and metrics.collisionSize or metrics.healerSize,
+                r = r or 1,
+                g = g or 1,
+                b = b or 1,
+                healerR = healerR or 1,
+                healerG = healerG or 1,
+                healerB = healerB or 1,
+                specIcon = specIcon,
+                specName = specName,
+            }
+        end
         return {
             kind = "team",
             layered = true,
             borderTexture = CUSTOM_TEAM_BORDER_TEXTURE,
             borderSize = metrics.borderSize,
-            fillTexture = self:GetTeamFillTexture(inCombat, useSolidOutOfCombat, isHealer),
+            fillTexture = self:GetTeamFillTexture(inCombat, useSolidOutOfCombat, showHealerCircle),
             fillSize = metrics.fillSize,
-            healerTexture = isHealer and self:ShouldUseSplitHealerOverlay() and self:GetHealerOverlayTexture(inCombat) or nil,
+            healerTexture = showHealerIcon and self:ShouldUseHealerIconOverlay(pinConfig)
+                and self:GetHealerOverlayTexture(inCombat) or nil,
             healerSize = metrics.healerSize,
             collisionSize = metrics.collisionSize,
             r = r or 1,
@@ -549,7 +646,7 @@ function Pins:BuildTeamPinAppearance(isHealer, inCombat, displayedSize, healerSe
 
     local texture
     local size = displayedSize
-    if isHealer and self:CustomTextureExists(CUSTOM_HEALER_PIN_TEXTURE) then
+    if showHealerIcon and self:CustomTextureExists(CUSTOM_HEALER_PIN_TEXTURE) then
         texture = self:GetHealerOverlayTexture(inCombat)
         size = healerSettingSize or displayedSize
     elseif self:CustomTextureExists(CUSTOM_TEAM_PIN_TEXTURE) then
@@ -559,7 +656,7 @@ function Pins:BuildTeamPinAppearance(isHealer, inCombat, displayedSize, healerSe
     end
 
     local fillR, fillG, fillB = r or 1, g or 1, b or 1
-    if isHealer and healerR and healerG and healerB then
+    if showHealerIcon and healerR and healerG and healerB then
         fillR, fillG, fillB = healerR, healerG, healerB
     end
 
@@ -588,7 +685,10 @@ function Pins:PopulateHealerOverlayFrame(frame, timeNow, targetSlot, targetUnit)
     if not frame then return end
     frame:ClearUnits()
 
-    if not self:ShouldUseSplitHealerOverlay() then
+    local pinConfig = BattleMaps.Database:GetUnitsConfig(
+        self.unitConfigMapID or (BattleMaps.MapFrame and BattleMaps.MapFrame.currentMapID)
+    )
+    if not self:ShouldUseHealerIconOverlay(pinConfig) then
         frame:FinalizeUnits()
         frame.needsFullUpdate = false
         return
@@ -605,19 +705,21 @@ function Pins:PopulateHealerOverlayFrame(frame, timeNow, targetSlot, targetUnit)
     local normalSize = self.unitTeamSize or 12
     local healerSettingSize = self.unitHealerSize or 16
     local trackCombat = self:ShouldUseCombatHealerTexture()
-    local pinConfig = BattleMaps.Database:GetUnitsConfig(
-        self.unitConfigMapID or (BattleMaps.MapFrame and BattleMaps.MapFrame.currentMapID)
-    )
-
     for index = 1, memberCount do
         local unit = unitBase .. index
         if UnitExists(unit)
             and not UnitIsUnit(unit, "player")
             and (not targetUnit or UnitIsUnit(unit, targetUnit))
             and (not targetSlot or GetUnitStackSlot(unit) == targetSlot)
-            and self:IsFriendlyHealer(unit) then
+            and self:ShouldRenderHealerIcon(self:IsFriendlyHealer(unit), pinConfig) then
             local inCombat = trackCombat and self:IsUnitInCombat(unit) or false
-            local metrics = self:GetTeamPinMetrics(normalSize, healerSettingSize, normalSize)
+            local metrics = self:GetTeamPinMetrics(
+                normalSize,
+                healerSettingSize,
+                normalSize,
+                nil,
+                pinConfig.teamPinBorderScale
+            )
             local healerR, healerG, healerB = self:GetHealerIconColor(unit, timeNow, pinConfig)
             frame:AddUnit(
                 unit,
@@ -710,6 +812,9 @@ function Pins:PopulateTeamBorderFrame(frame, timeNow, targetSlot, targetUnit)
     local normalSize = self.unitTeamSize or 12
     local healerSettingSize = self.unitHealerSize or 16
     local trackCombat = false
+    local pinConfig = BattleMaps.Database:GetUnitsConfig(
+        self.unitConfigMapID or (BattleMaps.MapFrame and BattleMaps.MapFrame.currentMapID)
+    )
 
     for index = 1, memberCount do
         local unit = unitBase .. index
@@ -718,16 +823,32 @@ function Pins:PopulateTeamBorderFrame(frame, timeNow, targetSlot, targetUnit)
             and (not targetUnit or UnitIsUnit(unit, targetUnit))
             and (not targetSlot or GetUnitStackSlot(unit) == targetSlot) then
             local inCombat = trackCombat and self:IsUnitInCombat(unit) or false
-            local metrics = self:GetTeamPinMetrics(normalSize, healerSettingSize, normalSize)
-            frame:AddUnit(
-                unit,
-                CUSTOM_TEAM_BORDER_TEXTURE,
-                metrics.borderSize,
-                metrics.borderSize,
-                1, 1, 1, 1,
-                TEAM_BORDER_SUBLEVEL,
-                false
+            local metrics = self:GetTeamPinMetrics(
+                normalSize,
+                healerSettingSize,
+                normalSize,
+                nil,
+                pinConfig.teamPinBorderScale
             )
+            local isIconOnly = self:IsFriendlyHealer(unit)
+                and self:GetHealerPinStyle(pinConfig) == "icon"
+                and self:ShouldUseHealerIconOverlay(pinConfig)
+            local borderTexture = isIconOnly and self:GetHealerIconOnlyBorderTexture()
+                or CUSTOM_TEAM_BORDER_TEXTURE
+            if borderTexture then
+                local borderSize = isIconOnly
+                    and self:GetHealerIconOnlyBorderSize(metrics)
+                    or metrics.borderSize
+                frame:AddUnit(
+                    unit,
+                    borderTexture,
+                    borderSize,
+                    borderSize,
+                    1, 1, 1, 1,
+                    TEAM_BORDER_SUBLEVEL,
+                    false
+                )
+            end
         end
     end
 
@@ -793,7 +914,13 @@ function Pins:GetPlayerPinAppearance(pinConfig, playerSize, teamPinSize)
     end
     if style == "team" then
         local renderedSize = BattleMaps.Clamp(tonumber(teamPinSize) or playerSize, 3, 64)
-        local metrics = self:GetTeamPinMetrics(renderedSize, 16, renderedSize)
+        local metrics = self:GetTeamPinMetrics(
+            renderedSize,
+            16,
+            renderedSize,
+            nil,
+            pinConfig and pinConfig.teamPinBorderScale
+        )
         return {
             style = style,
             texture = self:GetTeamFillTexture(false, true, false),
@@ -1147,8 +1274,17 @@ function Pins:GetHealerIconColor(unit, timeNow, pinConfig, classFile)
         and BattleMaps.Database:GetUnitsConfig(self.unitConfigMapID
             or (BattleMaps.MapFrame and BattleMaps.MapFrame.currentMapID))) or {}
 
-    if pinConfig.healerIconColorMode == "class" then
-        return self:GetPlayerClassColor()
+    if (pinConfig.healerIconColorMode or "class") == "class" then
+        classFile = classFile or (unit and select(2, UnitClass(unit)))
+        if classFile then
+            local classColor = RAID_CLASS_COLORS and RAID_CLASS_COLORS[classFile]
+            if classColor then
+                return classColor.r, classColor.g, classColor.b
+            end
+            local r, g, b = GetClassColor(classFile)
+            if r and g and b then return r, g, b end
+        end
+        return 1, 1, 1
     end
 
     local color = type(pinConfig.healerIconCustomColor) == "table"
@@ -1459,7 +1595,8 @@ function Pins:GetTeamStackAppearance(unit, timeNow)
         useSolidOutOfCombat,
         r, g, b,
         healerR, healerG, healerB,
-        specIcon, specName
+        specIcon, specName,
+        pinConfig
     )
     appearance.isHealer = isHealer
     appearance.inCombat = inCombat
@@ -1474,8 +1611,15 @@ function Pins:AcquireTeamStackPin(index)
     frame = CreateFrame("Frame", nil, self.parent)
     frame:SetFrameLevel(self.parent:GetFrameLevel() + TEAM_STACK_FRAME_LEVEL_OFFSET)
 
-    local borderTexture = frame:CreateTexture(nil, "BACKGROUND", nil, 0)
-    borderTexture:SetPoint("CENTER", frame, "CENTER", 0, 0)
+    -- Keep the black backplate on its own frame so the FoV beam can pass
+    -- between it and this frame's coloured fill/healer artwork.
+    local borderFrame = CreateFrame("Frame", nil, self.parent)
+    borderFrame:SetFrameLevel(self.parent:GetFrameLevel() + TEAM_STACK_BORDER_FRAME_LEVEL_OFFSET)
+    borderFrame:Hide()
+    frame.borderFrame = borderFrame
+
+    local borderTexture = borderFrame:CreateTexture(nil, "BACKGROUND", nil, 0)
+    borderTexture:SetPoint("CENTER", borderFrame, "CENTER", 0, 0)
     borderTexture:SetBlendMode("BLEND")
     borderTexture:Hide()
     frame.borderTexture = borderTexture
@@ -1513,6 +1657,7 @@ function Pins:HideTeamStackOverlay()
     if type(self.teamStackPinPool) == "table" then
         for _, frame in ipairs(self.teamStackPinPool) do
             frame:Hide()
+            if frame.borderFrame then frame.borderFrame:Hide() end
             frame.active = false
         end
     end
@@ -1882,10 +2027,14 @@ function Pins:RenderTeamStackOverlay(entries, canvasWidth, canvasHeight)
 
         frame:SetSize(outerSize, outerSize)
         local frameLevelOffset = TEAM_STACK_FRAME_LEVEL_OFFSET
+        local borderFrameLevelOffset = TEAM_STACK_BORDER_FRAME_LEVEL_OFFSET
         if isPlayer then
             frameLevelOffset = entry.behindTeamPins
                 and PLAYER_BEHIND_TEAM_FRAME_LEVEL_OFFSET
                 or PLAYER_FRAME_LEVEL_OFFSET
+            if isTeamPlayer then
+                borderFrameLevelOffset = PLAYER_TEAM_BORDER_FRAME_LEVEL_OFFSET
+            end
         end
         frame:SetFrameLevel(self.parent:GetFrameLevel() + frameLevelOffset)
         local pointX = (entry.x * canvasWidth) + (tonumber(entry.offsetX) or 0)
@@ -1896,9 +2045,19 @@ function Pins:RenderTeamStackOverlay(entries, canvasWidth, canvasHeight)
         frame.BattleMapsFanOffsetY = 0
         frame:ClearAllPoints()
         frame:SetPoint("CENTER", canvas, "TOPLEFT", pointX, pointY)
+        local borderFrame = frame.borderFrame
+        if borderFrame then
+            borderFrame:SetSize(outerSize, outerSize)
+            borderFrame:SetFrameLevel(self.parent:GetFrameLevel() + borderFrameLevelOffset)
+            borderFrame.BattleMapsBasePointX = pointX
+            borderFrame.BattleMapsBasePointY = pointY
+            borderFrame:ClearAllPoints()
+            borderFrame:SetPoint("CENTER", canvas, "TOPLEFT", pointX, pointY)
+        end
 
         if isPlayer and not isTeamPlayer then
             frame.borderTexture:Hide()
+            if borderFrame then borderFrame:Hide() end
             frame.healerTexture:Hide()
             frame.specBackdrop:Hide()
             frame.specTexture:Hide()
@@ -1914,26 +2073,32 @@ function Pins:RenderTeamStackOverlay(entries, canvasWidth, canvasHeight)
             if entry.layered and entry.borderTexture then
                 local borderSize = BattleMaps.Clamp(tonumber(entry.borderSize) or outerSize, 3, renderedSizeMaximum)
                 frame.borderTexture:ClearAllPoints()
-                frame.borderTexture:SetPoint("CENTER", frame, "CENTER", 0, 0)
+                frame.borderTexture:SetPoint("CENTER", borderFrame or frame, "CENTER", 0, 0)
                 frame.borderTexture:SetSize(borderSize, borderSize)
                 ApplyTextureToRegion(frame.borderTexture, entry.borderTexture)
                 if frame.borderTexture.SetRotation then frame.borderTexture:SetRotation(playerRotation) end
                 frame.borderTexture:SetVertexColor(1, 1, 1, 1)
                 frame.borderTexture:SetAlpha(1)
                 frame.borderTexture:Show()
+                if borderFrame then borderFrame:Show() end
             else
                 frame.borderTexture:Hide()
+                if borderFrame then borderFrame:Hide() end
             end
 
-            local fillSize = BattleMaps.Clamp(tonumber(entry.fillSize or entry.size) or outerSize, 3, renderedSizeMaximum)
-            frame.fillTexture:ClearAllPoints()
-            frame.fillTexture:SetPoint("CENTER", frame, "CENTER", 0, 0)
-            frame.fillTexture:SetSize(fillSize, fillSize)
-            ApplyTextureToRegion(frame.fillTexture, entry.fillTexture or entry.texture)
-            if frame.fillTexture.SetRotation then frame.fillTexture:SetRotation(playerRotation) end
-            frame.fillTexture:SetVertexColor(entry.r or 1, entry.g or 1, entry.b or 1, 1)
-            frame.fillTexture:SetAlpha(1)
-            frame.fillTexture:Show()
+            if entry.fillTexture or entry.texture then
+                local fillSize = BattleMaps.Clamp(tonumber(entry.fillSize or entry.size) or outerSize, 3, renderedSizeMaximum)
+                frame.fillTexture:ClearAllPoints()
+                frame.fillTexture:SetPoint("CENTER", frame, "CENTER", 0, 0)
+                frame.fillTexture:SetSize(fillSize, fillSize)
+                ApplyTextureToRegion(frame.fillTexture, entry.fillTexture or entry.texture)
+                if frame.fillTexture.SetRotation then frame.fillTexture:SetRotation(playerRotation) end
+                frame.fillTexture:SetVertexColor(entry.r or 1, entry.g or 1, entry.b or 1, 1)
+                frame.fillTexture:SetAlpha(1)
+                frame.fillTexture:Show()
+            else
+                frame.fillTexture:Hide()
+            end
 
             if entry.healerTexture then
                 local healerSize = BattleMaps.Clamp(tonumber(entry.healerSize) or (outerSize * 0.56), 3, 128)
@@ -2000,6 +2165,7 @@ function Pins:RenderTeamStackOverlay(entries, canvasWidth, canvasHeight)
                 frame.BattleMapsIsPlayer = nil
                 if frame.specBackdrop then frame.specBackdrop:Hide() end
                 if frame.specTexture then frame.specTexture:Hide() end
+                if frame.borderFrame then frame.borderFrame:Hide() end
                 frame:Hide()
             end
         end
@@ -2045,7 +2211,8 @@ function Pins:GetTeamStackTestAppearance(index, isHealer, inCombat, pinConfig, z
         useSolidOutOfCombat,
         color[1], color[2], color[3],
         healerR, healerG, healerB,
-        specIcon, specName
+        specIcon, specName,
+        pinConfig
     )
     appearance.isHealer = isHealer
     appearance.inCombat = inCombat
@@ -2129,7 +2296,8 @@ function Pins:RefreshTeamStackTestPreview()
         largestCollisionSize > 0 and largestCollisionSize or teamSize,
         healerSettingSize,
         teamSize,
-        playerVisualSize
+        playerVisualSize,
+        pinConfig.teamPinBorderScale
     )
     local playerEntry = {
         unit = "player",
@@ -2243,7 +2411,7 @@ function Pins:GetPlayerFovLayerFrameLevel(layer)
     if renderParent and renderParent ~= self.parent then
         return renderParent:GetFrameLevel() + 1
     end
-    return self.parent:GetFrameLevel() + PLAYER_FOV_FRAME_LEVEL_OFFSET
+    return self.parent:GetFrameLevel() + PLAYER_FOV_BEAM_FRAME_LEVEL_OFFSET
 end
 
 function Pins:AcquireTestFovLayer(layer)
@@ -2616,6 +2784,17 @@ function Pins:SetTeamOverlayFanOffset(unit, offsetX, offsetY)
                     (tonumber(frame.BattleMapsBasePointX) or 0) + offsetX,
                     (tonumber(frame.BattleMapsBasePointY) or 0) + offsetY
                 )
+                local borderFrame = frame.borderFrame
+                if borderFrame then
+                    borderFrame:ClearAllPoints()
+                    borderFrame:SetPoint(
+                        "CENTER",
+                        canvas,
+                        "TOPLEFT",
+                        (tonumber(frame.BattleMapsBasePointX) or 0) + offsetX,
+                        (tonumber(frame.BattleMapsBasePointY) or 0) + offsetY
+                    )
+                end
             end
             return
         end
@@ -2691,7 +2870,7 @@ function Pins:PrepareTeamStackUnitFrameFallback(
 
     local anyActive = false
     local useLayered = self:ShouldUseLayeredTeamPins()
-    local useHealerOverlay = self:ShouldUseSplitHealerOverlay()
+    local useHealerOverlay = self:ShouldUseHealerIconOverlay(pinConfig)
 
     for _, fillFrame in ipairs(self.teamStackUnitFrames) do
         local borderFrame = self.teamStackBorderFrames
@@ -2757,6 +2936,9 @@ function Pins:UpdateTeamStackUnitFrameFull(frame, timeNow)
     local targetUnit = frame.BattleMapsTargetUnit
     local targetSlot = targetUnit and nil or (tonumber(frame.BattleMapsStackSlot) or 1)
     local db = BattleMaps.Database:Get()
+    local pinConfig = BattleMaps.Database:GetUnitsConfig(
+        self.unitConfigMapID or (BattleMaps.MapFrame and BattleMaps.MapFrame.currentMapID)
+    )
     local useLayered = self:ShouldUseLayeredTeamPins()
     local useSolidOutOfCombat = db.useSolidTeamPinOutOfCombat ~= false
     local trackHealerCombat = self:ShouldUseSplitHealerOverlay()
@@ -2777,22 +2959,32 @@ function Pins:UpdateTeamStackUnitFrameFull(frame, timeNow)
             seenUnits[unit] = true
             combatStateByUnit[unit] = inCombat
             local r, g, b = self:GetUnitClassColor(unit, timeNow)
+            local healerR, healerG, healerB = self:GetHealerIconColor(unit, timeNow, pinConfig)
 
             if useLayered then
-                local metrics = self:GetTeamPinMetrics(normalSize, healerSettingSize, normalSize)
-                frame:AddUnit(
-                    unit,
-                    self:GetTeamFillTexture(inCombat, useSolidOutOfCombat, isHealer),
-                    metrics.fillSize,
-                    metrics.fillSize,
-                    r, g, b, 1,
-                    GROUP_PIN_SUBLEVEL,
-                    false
-                )
+                if not (isHealer and self:GetHealerPinStyle(pinConfig) == "icon"
+                    and self:ShouldUseHealerIconOverlay(pinConfig)) then
+                    local metrics = self:GetTeamPinMetrics(
+                        normalSize, healerSettingSize, normalSize, nil, pinConfig.teamPinBorderScale)
+                    frame:AddUnit(
+                        unit,
+                        self:GetTeamFillTexture(
+                            inCombat, useSolidOutOfCombat,
+                            self:ShouldRenderHealerCircle(isHealer, pinConfig)
+                        ),
+                        metrics.fillSize,
+                        metrics.fillSize,
+                        r, g, b, 1,
+                        GROUP_PIN_SUBLEVEL,
+                        false
+                    )
+                end
             else
                 local appearance = self:BuildTeamPinAppearance(
                     isHealer, inCombat, normalSize, healerSettingSize, normalSize,
-                    useSolidOutOfCombat, r, g, b
+                    useSolidOutOfCombat, r, g, b,
+                    healerR, healerG, healerB,
+                    nil, nil, pinConfig
                 )
                 frame:AddUnit(
                     unit,
@@ -2919,6 +3111,9 @@ function Pins:UpdateUnitFrameFull(unitFrame, timeNow)
     unitFrame:ClearUnits()
 
     local db = BattleMaps.Database:Get()
+    local pinConfig = BattleMaps.Database:GetUnitsConfig(
+        self.unitConfigMapID or (BattleMaps.MapFrame and BattleMaps.MapFrame.currentMapID)
+    )
     local memberCount, unitBase = GetLiveGroupRosterSource(unitFrame)
     local showNativeGroupPins = self.nativeGroupPinsVisible ~= false
     local useLayered = self:ShouldUseLayeredTeamPins()
@@ -2942,22 +3137,32 @@ function Pins:UpdateUnitFrameFull(unitFrame, timeNow)
                 if isHealer then healerCount = healerCount + 1 end
 
                 local r, g, b = self:GetUnitClassColor(unit, timeNow)
+                local healerR, healerG, healerB = self:GetHealerIconColor(unit, timeNow, pinConfig)
 
                 if useLayered then
-                    local metrics = self:GetTeamPinMetrics(normalSize, healerSettingSize, normalSize)
-                    unitFrame:AddUnit(
-                        unit,
-                        self:GetTeamFillTexture(inCombat, useSolidOutOfCombat, isHealer),
-                        metrics.fillSize,
-                        metrics.fillSize,
-                        r, g, b, 1,
-                        GROUP_PIN_SUBLEVEL,
-                        false
-                    )
+                    if not (isHealer and self:GetHealerPinStyle(pinConfig) == "icon"
+                        and self:ShouldUseHealerIconOverlay(pinConfig)) then
+                        local metrics = self:GetTeamPinMetrics(
+                            normalSize, healerSettingSize, normalSize, nil, pinConfig.teamPinBorderScale)
+                        unitFrame:AddUnit(
+                            unit,
+                            self:GetTeamFillTexture(
+                                inCombat, useSolidOutOfCombat,
+                                self:ShouldRenderHealerCircle(isHealer, pinConfig)
+                            ),
+                            metrics.fillSize,
+                            metrics.fillSize,
+                            r, g, b, 1,
+                            GROUP_PIN_SUBLEVEL,
+                            false
+                        )
+                    end
                 else
                     local appearance = self:BuildTeamPinAppearance(
                         isHealer, inCombat, normalSize, healerSettingSize, normalSize,
-                        useSolidOutOfCombat, r, g, b
+                        useSolidOutOfCombat, r, g, b,
+                        healerR, healerG, healerB,
+                        nil, nil, pinConfig
                     )
                     unitFrame:AddUnit(
                         unit,
@@ -3634,7 +3839,7 @@ function Pins:RefreshUnits(forceFullUpdate)
     local playerFrameLevelOffset = pinConfig.excludePlayerArrowFromStack == true
         and PLAYER_BEHIND_TEAM_FRAME_LEVEL_OFFSET
         or PLAYER_FRAME_LEVEL_OFFSET
-    local playerTeamBorderFrameLevelOffset = playerFrameLevelOffset - 1
+    local playerTeamBorderFrameLevelOffset = PLAYER_TEAM_BORDER_FRAME_LEVEL_OFFSET
     if self.playerArrowFrameLevelOffset ~= playerFrameLevelOffset then
         self.playerArrowFrameLevelOffset = playerFrameLevelOffset
         if self.playerFrame then
@@ -3654,11 +3859,14 @@ function Pins:RefreshUnits(forceFullUpdate)
     local fovStyle = self:GetPlayerFovStyle(pinConfig)
     local fovSize = self:GetPlayerFovSize(pinConfig, self:GetPlayerFovMapScale())
     local healerSettingSize = BattleMaps.Clamp(tonumber(pinConfig.healerPinSize) or 16, 0.50, 160)
+    local teamBorderScale = self:GetTeamPinBorderScale(pinConfig)
+    local healerPinStyle = self:GetHealerPinStyle(pinConfig)
     local metrics = self:GetTeamPinMetrics(
         teamSize,
         healerSettingSize,
         teamSize,
-        playerAppearance.borderSize or playerAppearance.size
+        playerAppearance.borderSize or playerAppearance.size,
+        teamBorderScale
     )
 
     if self.unitMapID ~= unitMapID or self.unitConfigMapID ~= mapID then
@@ -3716,8 +3924,9 @@ function Pins:RefreshUnits(forceFullUpdate)
         end
         forceFullUpdate = true
     end
-    if self.unitTeamSize ~= teamSize then
+    if self.unitTeamSize ~= teamSize or self.unitTeamBorderScale ~= teamBorderScale then
         self.unitTeamSize = teamSize
+        self.unitTeamBorderScale = teamBorderScale
         self.teamSpecIconFrameAnchored = false
         if self.teamBorderFrame then
             self.teamBorderFrame:SetPinSize("party", metrics.borderSize)
@@ -3727,8 +3936,9 @@ function Pins:RefreshUnits(forceFullUpdate)
         unitFrame:SetPinSize("raid", metrics.fillSize)
         forceFullUpdate = true
     end
-    if self.unitHealerSize ~= healerSettingSize then
+    if self.unitHealerSize ~= healerSettingSize or self.unitHealerPinStyle ~= healerPinStyle then
         self.unitHealerSize = healerSettingSize
+        self.unitHealerPinStyle = healerPinStyle
         forceFullUpdate = true
     end
     self:LayoutUnitFrame()
@@ -3875,7 +4085,7 @@ function Pins:RefreshUnits(forceFullUpdate)
             end
         end
         if self.healerOverlayFrame then
-            local useHealer = self:ShouldUseSplitHealerOverlay()
+            local useHealer = self:ShouldUseHealerIconOverlay(pinConfig)
             self.healerOverlayFrame:SetAlpha(useHealer and 1 or 0)
             if useHealer then
                 self.healerOverlayFrame:UpdatePlayerPins()

@@ -418,6 +418,16 @@ local function GetCurrentPlayerClassColor()
     return 1, 1, 1
 end
 
+local function GetDynamicClassPreviewColor(context)
+    if context and type(context.getClassPreviewColor) == "function" then
+        local r, g, b = context.getClassPreviewColor()
+        return BattleMaps.Clamp(tonumber(r) or 1, 0, 1),
+            BattleMaps.Clamp(tonumber(g) or 1, 0, 1),
+            BattleMaps.Clamp(tonumber(b) or 1, 0, 1)
+    end
+    return GetCurrentPlayerClassColor()
+end
+
 local function SetDynamicColorPickerRGB(r, g, b)
     local picker = ColorPickerFrame
     local colorPicker = picker and picker.Content and picker.Content.ColorPicker
@@ -494,7 +504,7 @@ function Options:ConfigureDynamicColorPickerClassButton()
         if not context then return end
 
         picker.BattleMapsUseDynamicClassColor = true
-        local r, g, b = GetCurrentPlayerClassColor()
+        local r, g, b = GetDynamicClassPreviewColor(context)
         SetDynamicColorPickerRGB(r, g, b)
 
         context.setMode("class")
@@ -513,7 +523,7 @@ function Options:OpenDynamicClassColorPicker(context)
     }
     local initial = previous
     if previousMode == "class" then
-        local r, g, b = GetCurrentPlayerClassColor()
+        local r, g, b = GetDynamicClassPreviewColor(context)
         initial = { r = r, g = g, b = b }
     end
 
@@ -527,10 +537,11 @@ function Options:OpenDynamicClassColorPicker(context)
     local pickerContext = {
         setMode = context.setMode,
         refresh = context.refresh,
+        getClassPreviewColor = context.getClassPreviewColor,
     }
     local function ApplyColor()
         local r, g, b = ColorPickerFrame:GetColorRGB()
-        local classR, classG, classB = GetCurrentPlayerClassColor()
+        local classR, classG, classB = GetDynamicClassPreviewColor(context)
         local matchesCurrentClass = math.abs(r - classR) < 0.004
             and math.abs(g - classG) < 0.004
             and math.abs(b - classB) < 0.004
@@ -584,6 +595,11 @@ function Options:OpenHealerIconColorPicker()
         setMode = function(mode) target.healerIconColorMode = mode end,
         getColor = function() return target.healerIconCustomColor end,
         setColor = function(color) target.healerIconCustomColor = color end,
+        getClassPreviewColor = function()
+            -- Class is evaluated per healer rather than from the current
+            -- player, so the picker deliberately has no single class hue.
+            return 1, 1, 1
+        end,
         refresh = function()
             self:Refresh()
             if BattleMaps.Pins then BattleMaps.Pins:RefreshGroup() end
@@ -1548,6 +1564,8 @@ function Options:Refresh()
     SetControlEnabled(self.playerFovBeamAlphaSlider, spotlightEnabled)
     SetControlEnabled(self.playerFovArcAlphaSlider, spotlightEnabled)
     local teamStackingEnabled = unitsSettings.stackTeamPins ~= false
+    local healerIconEnabled = unitsSettings.healerPinStyle ~= "ignore"
+    SetControlEnabled(self.healerIconCustomColorControl, healerIconEnabled)
     SetControlEnabled(self.excludePlayerArrowFromStackCheck, teamStackingEnabled)
     SetControlEnabled(self.teamPinStackOverlapSlider, teamStackingEnabled)
     SetControlEnabled(self.teamPinStackDirectionDropdown, teamStackingEnabled)

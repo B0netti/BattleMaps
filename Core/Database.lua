@@ -6,7 +6,7 @@ BattleMaps.Database = Database
 local PIN_DEFAULTS = {
     playerArrowSize = 33,
     teamMemberPinSize = 13,
-    healerPinSize = 16.5,
+    healerPinSize = 16,
     combatTeamPinScale = 1.00, -- retired setting retained at 1 for SavedVariables compatibility
     objectivePinScale = 2.10,
     objectivePinAlpha = 0.90,
@@ -25,6 +25,8 @@ local PLAYER_PIN_DEFAULTS = {
     playerFovArcAlpha = 1.00,
     teamMemberPinSize = PIN_DEFAULTS.teamMemberPinSize,
     healerPinSize = PIN_DEFAULTS.healerPinSize,
+    teamPinBorderScale = 1.00,
+    healerPinStyle = "icon",
     combatTeamPinScale = PIN_DEFAULTS.combatTeamPinScale,
     stackTeamPins = true,
     fanOutTeamPinsOnHover = true,
@@ -33,7 +35,7 @@ local PLAYER_PIN_DEFAULTS = {
     teamPinStackOverlap = 25,
     teamPinStackDirection = "compact",
     showTeamSpecIcons = true,
-    healerIconColorMode = "custom",
+    healerIconColorMode = "class",
     healerIconCustomColor = { r = 1.00, g = 1.00, b = 1.00 },
 }
 
@@ -108,7 +110,6 @@ local ROOT_DEFAULTS = {
     applyFrameSize = true,
     showLoginMessage = true,
     debug = false,
-    developerOptions = false,
     factionSwapAlert = true,
     factionColoredBorder = true, -- legacy alias; kept for older saved variables
     frameBorderSize = 3,
@@ -183,6 +184,8 @@ local ROOT_DEFAULTS = {
     playerFovArcAlpha = PLAYER_PIN_DEFAULTS.playerFovArcAlpha,
     teamMemberPinSize = PIN_DEFAULTS.teamMemberPinSize,
     healerPinSize = PIN_DEFAULTS.healerPinSize,
+    teamPinBorderScale = PLAYER_PIN_DEFAULTS.teamPinBorderScale,
+    healerPinStyle = PLAYER_PIN_DEFAULTS.healerPinStyle,
     combatTeamPinScale = PIN_DEFAULTS.combatTeamPinScale,
     stackTeamPins = true,
     fanOutTeamPinsOnHover = true,
@@ -237,7 +240,7 @@ local PERSONAL_MAP_DEFAULTS = {
         playerPins = {
             playerArrowSize = 33,
             teamMemberPinSize = 12,
-            healerPinSize = 15.5,
+            healerPinSize = PIN_DEFAULTS.healerPinSize,
             combatTeamPinScale = 1,
             stackTeamPins = true,
             excludePlayerArrowFromStack = true,
@@ -297,7 +300,7 @@ local PERSONAL_MAP_DEFAULTS = {
         playerPins = {
             playerArrowSize = 22,
             teamMemberPinSize = 11,
-            healerPinSize = 9.5,
+            healerPinSize = PIN_DEFAULTS.healerPinSize,
             combatTeamPinScale = 1,
             stackTeamPins = true,
             excludePlayerArrowFromStack = false,
@@ -357,7 +360,7 @@ local PERSONAL_MAP_DEFAULTS = {
         playerPins = {
             playerArrowSize = 28,
             teamMemberPinSize = 9,
-            healerPinSize = 16,
+            healerPinSize = PIN_DEFAULTS.healerPinSize,
             combatTeamPinScale = 1,
             stackTeamPins = true,
             excludePlayerArrowFromStack = true,
@@ -417,7 +420,7 @@ local PERSONAL_MAP_DEFAULTS = {
         playerPins = {
             playerArrowSize = 22,
             teamMemberPinSize = 6,
-            healerPinSize = 7,
+            healerPinSize = PIN_DEFAULTS.healerPinSize,
             combatTeamPinScale = 1,
             stackTeamPins = true,
             excludePlayerArrowFromStack = false,
@@ -477,7 +480,7 @@ local PERSONAL_MAP_DEFAULTS = {
         playerPins = {
             playerArrowSize = 45,
             teamMemberPinSize = 13,
-            healerPinSize = 14,
+            healerPinSize = PIN_DEFAULTS.healerPinSize,
             combatTeamPinScale = 1,
             stackTeamPins = true,
             excludePlayerArrowFromStack = true,
@@ -539,7 +542,7 @@ local PERSONAL_MAP_DEFAULTS = {
         playerPins = {
             playerArrowSize = 22,
             teamMemberPinSize = 12,
-            healerPinSize = 16,
+            healerPinSize = PIN_DEFAULTS.healerPinSize,
             combatTeamPinScale = 1,
             stackTeamPins = true,
             excludePlayerArrowFromStack = false,
@@ -599,7 +602,7 @@ local PERSONAL_MAP_DEFAULTS = {
         playerPins = {
             playerArrowSize = 34,
             teamMemberPinSize = 13,
-            healerPinSize = 15,
+            healerPinSize = PIN_DEFAULTS.healerPinSize,
             combatTeamPinScale = 1,
             stackTeamPins = true,
             excludePlayerArrowFromStack = true,
@@ -659,7 +662,7 @@ local PERSONAL_MAP_DEFAULTS = {
         playerPins = {
             playerArrowSize = 28,
             teamMemberPinSize = 10,
-            healerPinSize = 14.5,
+            healerPinSize = PIN_DEFAULTS.healerPinSize,
             combatTeamPinScale = 1,
             stackTeamPins = true,
             excludePlayerArrowFromStack = true,
@@ -719,7 +722,7 @@ local PERSONAL_MAP_DEFAULTS = {
         playerPins = {
             playerArrowSize = 31,
             teamMemberPinSize = 12,
-            healerPinSize = 18.5,
+            healerPinSize = PIN_DEFAULTS.healerPinSize,
             combatTeamPinScale = 1,
             stackTeamPins = true,
             excludePlayerArrowFromStack = false,
@@ -779,7 +782,7 @@ local PERSONAL_MAP_DEFAULTS = {
         playerPins = {
             playerArrowSize = 41,
             teamMemberPinSize = 15,
-            healerPinSize = 12,
+            healerPinSize = PIN_DEFAULTS.healerPinSize,
             combatTeamPinScale = 1,
             stackTeamPins = true,
             excludePlayerArrowFromStack = true,
@@ -1120,6 +1123,13 @@ function Database:Initialize()
     BattleMapsDB.fanOutTeamPinsOnHover = BattleMapsDB.fanOutTeamPinsOnHover ~= false
     BattleMapsDB.showTeamSpecIcons = BattleMapsDB.showTeamSpecIcons ~= false
     BattleMapsDB.combatTeamPinScale = 1
+    BattleMapsDB.teamPinBorderScale = BattleMaps.Clamp(
+        tonumber(BattleMapsDB.teamPinBorderScale) or PLAYER_PIN_DEFAULTS.teamPinBorderScale,
+        0.50,
+        2.00
+    )
+    BattleMapsDB.healerPinStyle = ({ circle = true, icon = true, ignore = true })[BattleMapsDB.healerPinStyle]
+        and BattleMapsDB.healerPinStyle or PLAYER_PIN_DEFAULTS.healerPinStyle
     local healerIconColor = type(BattleMapsDB.healerIconCustomColor) == "table"
         and BattleMapsDB.healerIconCustomColor or {}
     healerIconColor.r = BattleMaps.Clamp(tonumber(healerIconColor.r or healerIconColor[1]) or 1, 0, 1)
@@ -1383,6 +1393,13 @@ function Database:Initialize()
         ) + 0.5)
         config.objectives.factionColorEnemyKotmoguOrbs = config.objectives.factionColorEnemyKotmoguOrbs ~= false
         config.playerPins.combatTeamPinScale = 1
+        config.playerPins.teamPinBorderScale = BattleMaps.Clamp(
+            tonumber(config.playerPins.teamPinBorderScale) or PLAYER_PIN_DEFAULTS.teamPinBorderScale,
+            0.50,
+            2.00
+        )
+        config.playerPins.healerPinStyle = ({ circle = true, icon = true, ignore = true })[config.playerPins.healerPinStyle]
+            and config.playerPins.healerPinStyle or PLAYER_PIN_DEFAULTS.healerPinStyle
         config.playerPins.stackTeamPins = config.playerPins.stackTeamPins ~= false
         config.playerPins.fanOutTeamPinsOnHover = config.playerPins.fanOutTeamPinsOnHover ~= false
         config.playerPins.excludePlayerArrowFromStack = config.playerPins.excludePlayerArrowFromStack == true
@@ -1699,6 +1716,13 @@ function Database:ResetPlayerPins(mapID)
     if not target then return end
     local source = GetCategoryResetSource(mapID, PLAYER_PIN_DEFAULTS, "playerPins", useGlobal)
     ResetDefaults(source, target)
+    target.teamPinBorderScale = BattleMaps.Clamp(
+        tonumber(source.teamPinBorderScale) or PLAYER_PIN_DEFAULTS.teamPinBorderScale,
+        0.50,
+        2.00
+    )
+    target.healerPinStyle = ({ circle = true, icon = true, ignore = true })[source.healerPinStyle]
+        and source.healerPinStyle or PLAYER_PIN_DEFAULTS.healerPinStyle
     target.playerFovStyle = source.playerFovStyle or PLAYER_PIN_DEFAULTS.playerFovStyle
     target.playerFovScale = source.playerFovScale or PLAYER_PIN_DEFAULTS.playerFovScale
     target.playerFovAlpha = source.playerFovAlpha or PLAYER_PIN_DEFAULTS.playerFovAlpha

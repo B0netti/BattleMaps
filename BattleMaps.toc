@@ -1,8 +1,8 @@
-## Interface: 120007
+## Interface: 120100
 ## Title: |cffE3AD68BattleMaps|r
 ## Notes: Tactical BG Maps.
 ## Author: Bonetti
-## Version: 2.6.50
+## Version: 2.7.0
 ## SavedVariables: BattleMapsDB
 ## Category: PvP
 ## Category-deDE: PvP

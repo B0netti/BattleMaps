@@ -14,8 +14,7 @@ local BORDER_STYLE_OPTIONS = Options.Constants.BORDER_STYLE_OPTIONS
 
 function Options:CreateGeneralPage(parent)
     local db = BattleMaps.Database:Get()
-    local showDeveloperMapControls = db.developerOptions == true
-    local appearanceHeight = showDeveloperMapControls and 334 or 238
+    local appearanceHeight = 334
     local page = CreateFrame("Frame", nil, parent)
     self.pages.general = page
     page:SetAllPoints(parent)
@@ -124,39 +123,37 @@ function Options:CreateGeneralPage(parent)
         end,
         function(value) return string.format("%d%%", math.floor((value * 100) + 0.5)) end)
 
-    if showDeveloperMapControls then
-        self.mapTextureAlphaSlider = MakeSlider(
-            appearance,
-            "Map texture opacity",
-            12,
-            -228,
-            0.20,
-            1.00,
-            0.05,
-            function() return tonumber(db.mapTextureAlpha) or 1 end,
-            function(value)
-                db.mapTextureAlpha = value
-                BattleMaps.MapFrame:ApplyVisualSettings()
-            end,
-            function(value) return string.format("%d%%", math.floor((value * 100) + 0.5)) end
-        )
+    self.mapTextureAlphaSlider = MakeSlider(
+        appearance,
+        "Map texture opacity",
+        12,
+        -228,
+        0.20,
+        1.00,
+        0.05,
+        function() return tonumber(db.mapTextureAlpha) or 1 end,
+        function(value)
+            db.mapTextureAlpha = value
+            BattleMaps.MapFrame:ApplyVisualSettings()
+        end,
+        function(value) return string.format("%d%%", math.floor((value * 100) + 0.5)) end
+    )
 
-        self.frameBackgroundColorControl = MakeColorSwatchControl(
-            appearance,
-            "Frame background",
-            12,
-            -276,
-            function()
-                local color = db.frameBackgroundColor
-                return type(color) == "table" and color
-                    or { r = 0.015, g = 0.015, b = 0.015, a = 0.12 }
-            end,
-            function() self:OpenFrameBackgroundColorPicker() end,
-            304
-        )
-        AddControlTooltip(self.frameBackgroundColorControl, "Frame background",
-            "Sets the color behind the map artwork. The color picker's opacity control changes the background opacity independently of Map texture opacity.")
-    end
+    self.frameBackgroundColorControl = MakeColorSwatchControl(
+        appearance,
+        "Frame background",
+        12,
+        -276,
+        function()
+            local color = db.frameBackgroundColor
+            return type(color) == "table" and color
+                or { r = 0.015, g = 0.015, b = 0.015, a = 0.12 }
+        end,
+        function() self:OpenFrameBackgroundColorPicker() end,
+        304
+    )
+    AddControlTooltip(self.frameBackgroundColorControl, "Frame background",
+        "Sets the color behind the map artwork. The color picker's opacity control changes the background opacity independently of Map texture opacity.")
 end
 
 if Options.RegisterPage then

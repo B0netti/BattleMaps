@@ -34,10 +34,9 @@ end
 
 function Options:CreateUnitsPage(parent)
     local db = BattleMaps.Database:Get()
-    local showDeveloperMapControls = db.developerOptions == true
-    local playerPanelHeight = showDeveloperMapControls and 214 or 160
+    local playerPanelHeight = 214
     local teamPanelY = -(42 + playerPanelHeight)
-    local stackingPanelY = teamPanelY - 174
+    local stackingPanelY = teamPanelY - 166
     local page = CreateFrame("Frame", nil, parent)
     self.pages.units = page
     page:SetAllPoints(parent)
@@ -157,58 +156,56 @@ function Options:CreateUnitsPage(parent)
     AddControlTooltip(self.playerFovAlphaSlider, "FoV alpha",
         "Changes only the FoV transparency. The artwork always retains its authored color.")
 
-    if showDeveloperMapControls then
-        self.playerFovSpotlightAlphaSlider = MakeSlider(
-            player,
-            "Spotlight alpha",
-            10,
-            -138,
-            0.00,
-            1.00,
-            0.05,
-            function() return tonumber(self:GetUnitsTarget().playerFovSpotlightAlpha) or 1.00 end,
-            function(value)
-                self:GetUnitsTarget().playerFovSpotlightAlpha = value
-                if BattleMaps.Pins then BattleMaps.Pins:RefreshGroup() end
-            end,
-            function(value) return string.format("%d%%", math.floor((value * 100) + 0.5)) end,
-            180
-        )
-        self.playerFovBeamAlphaSlider = MakeSlider(
-            player,
-            "Beam alpha",
-            210,
-            -138,
-            0.00,
-            1.00,
-            0.05,
-            function() return tonumber(self:GetUnitsTarget().playerFovBeamAlpha) or 1.00 end,
-            function(value)
-                self:GetUnitsTarget().playerFovBeamAlpha = value
-                if BattleMaps.Pins then BattleMaps.Pins:RefreshGroup() end
-            end,
-            function(value) return string.format("%d%%", math.floor((value * 100) + 0.5)) end,
-            250
-        )
-        self.playerFovArcAlphaSlider = MakeSlider(
-            player,
-            "Arc alpha",
-            500,
-            -138,
-            0.00,
-            1.00,
-            0.05,
-            function() return tonumber(self:GetUnitsTarget().playerFovArcAlpha) or 1.00 end,
-            function(value)
-                self:GetUnitsTarget().playerFovArcAlpha = value
-                if BattleMaps.Pins then BattleMaps.Pins:RefreshGroup() end
-            end,
-            function(value) return string.format("%d%%", math.floor((value * 100) + 0.5)) end,
-            160
-        )
-    end
+    self.playerFovSpotlightAlphaSlider = MakeSlider(
+        player,
+        "Spotlight alpha",
+        10,
+        -138,
+        0.00,
+        1.00,
+        0.05,
+        function() return tonumber(self:GetUnitsTarget().playerFovSpotlightAlpha) or 1.00 end,
+        function(value)
+            self:GetUnitsTarget().playerFovSpotlightAlpha = value
+            if BattleMaps.Pins then BattleMaps.Pins:RefreshGroup() end
+        end,
+        function(value) return string.format("%d%%", math.floor((value * 100) + 0.5)) end,
+        180
+    )
+    self.playerFovBeamAlphaSlider = MakeSlider(
+        player,
+        "Beam alpha",
+        210,
+        -138,
+        0.00,
+        1.00,
+        0.05,
+        function() return tonumber(self:GetUnitsTarget().playerFovBeamAlpha) or 1.00 end,
+        function(value)
+            self:GetUnitsTarget().playerFovBeamAlpha = value
+            if BattleMaps.Pins then BattleMaps.Pins:RefreshGroup() end
+        end,
+        function(value) return string.format("%d%%", math.floor((value * 100) + 0.5)) end,
+        250
+    )
+    self.playerFovArcAlphaSlider = MakeSlider(
+        player,
+        "Arc alpha",
+        500,
+        -138,
+        0.00,
+        1.00,
+        0.05,
+        function() return tonumber(self:GetUnitsTarget().playerFovArcAlpha) or 1.00 end,
+        function(value)
+            self:GetUnitsTarget().playerFovArcAlpha = value
+            if BattleMaps.Pins then BattleMaps.Pins:RefreshGroup() end
+        end,
+        function(value) return string.format("%d%%", math.floor((value * 100) + 0.5)) end,
+        160
+    )
 
-    local team = MakePanel(page, "Team Units", 0, teamPanelY, 684, 168)
+    local team = MakePanel(page, "Team Units", 0, teamPanelY, 684, 160)
     self.combatTeamCheck = MakeCheckbox(team, "Solid out of combat", 10, -30,
         function() return db.useSolidTeamPinOutOfCombat ~= false end,
         function(value)
@@ -232,19 +229,37 @@ function Options:CreateUnitsPage(parent)
         end,
         function(value) return string.format("%d px", value) end,
         250)
-    self.healerSizeSlider = MakeSlider(team, "Friendly Healers", 500, -30, 0.5, 40, 0.5,
+    self.healerSizeSlider = MakeSlider(team, "Healer icon size", 500, -30, 0.5, 40, 0.5,
         function() return tonumber(self:GetUnitsTarget().healerPinSize) or 16 end,
         function(value)
             self:GetUnitsTarget().healerPinSize = value
             if BattleMaps.Pins then BattleMaps.Pins:RefreshGroup() end
         end,
-        function(value)
-            if math.abs(value - math.floor(value + 0.5)) < 0.001 then
-                return string.format("%d", math.floor(value + 0.5))
-            end
-            return string.format("%.1f", value)
-        end,
+        function(value) return string.format("%d%%", math.floor(((value / 16) * 100) + 0.5)) end,
         160)
+    AddControlTooltip(self.healerSizeSlider, "Healer icon size",
+        "Scales the healer icon relative to its standard size. 100% is the default size.")
+
+    self.healerPinStyleDropdown = MakeDropdown(team, "Healer icon style", 10, -84, 180,
+        function()
+            return {
+                { value = "circle", label = "Icon inside circle" },
+                { value = "icon", label = "Icon only" },
+                { value = "ignore", label = "Ignore" },
+            }
+        end,
+        function() return self:GetUnitsTarget().healerPinStyle or "icon" end,
+        function(value)
+            self:GetUnitsTarget().healerPinStyle = ({
+                circle = true,
+                icon = true,
+                ignore = true,
+            })[value] and value or "icon"
+            if BattleMaps.Pins then BattleMaps.Pins:RefreshGroup() end
+        end,
+        false)
+    AddControlTooltip(self.healerPinStyleDropdown, "Healer icon style",
+        "Icon inside circle keeps the normal team pin beneath the healer glyph. Icon only shows only the healer glyph. Ignore renders healers as ordinary teammates.")
 
     self.healerIconCustomColorControl = MakeColorSwatchControl(
         team,
@@ -253,10 +268,10 @@ function Options:CreateUnitsPage(parent)
         -84,
         function()
             local target = self:GetUnitsTarget()
-            if target.healerIconColorMode == "class"
-                and BattleMaps.Pins and BattleMaps.Pins.GetPlayerClassColor then
-                local r, g, b = BattleMaps.Pins:GetPlayerClassColor()
-                return { r = r, g = g, b = b }
+            if (target.healerIconColorMode or "class") == "class" then
+                -- Class is resolved separately for every healer, so there is
+                -- no single class colour for this shared option swatch.
+                return { r = 1, g = 1, b = 1 }
             end
             return type(target.healerIconCustomColor) == "table"
                 and target.healerIconCustomColor
@@ -266,7 +281,7 @@ function Options:CreateUnitsPage(parent)
         160
     )
     AddControlTooltip(self.healerIconCustomColorControl, "Healer icon color",
-        "Click the color swatch to choose the healer cross/icon color. Class follows the currently logged-in character; the circular team-pin fill remains teammate class-colored.")
+        "Click the color swatch to choose the healer cross/icon color. Class colours each healer icon using that healer's own class; the shared swatch stays neutral because a group can contain multiple healer classes.")
 
     local stacking = MakePanel(page, "Team Pin Stacking", 0, stackingPanelY, 684, 118)
     self.teamStackInfoButton = MakeInformationButton(
