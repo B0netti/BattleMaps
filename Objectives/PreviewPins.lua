@@ -470,12 +470,19 @@ local SEETHING_SHORE_SPAWNING_TEXTURE =
 
 function Pins:ShouldShowDummyPins()
     local mapFrame = BattleMaps.MapFrame
-    return mapFrame ~= nil
-        and (mapFrame.editMode == true or mapFrame.testMode == true)
+    if not mapFrame then return false end
+
+    local testMode = mapFrame.testMode == true
+    local editMode = mapFrame.editMode == true
+    local inLiveBattleground = BattleMaps.IsInLiveBattleground() == true
+    return (testMode or editMode)
         and mapFrame.currentMapID ~= nil
         and mapFrame.frame ~= nil
         and mapFrame.frame:IsShown()
-        and not BattleMaps.IsInLiveBattleground()
+        -- Test Mode is an explicit visual sandbox and must remain synthetic even
+        -- inside the selected battleground. Edit Mode keeps the old live-BG
+        -- suppression so it cannot accidentally replace live unit rendering.
+        and (testMode or not inLiveBattleground)
 end
 
 function Pins:EnsureDummyPins()

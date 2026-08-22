@@ -12,6 +12,13 @@ local MakeSlider = W.MakeSlider
 local MakeDropdown = W.MakeDropdown
 local MakeColorSwatchControl = W.MakeColorSwatchControl
 
+local function ApplyFovPresetPresentation()
+    local db = BattleMaps.Database:Get()
+    db.mapTextureAlpha = 0.80
+    db.frameBackgroundColor = { r = 0, g = 0, b = 0, a = 1 }
+    if BattleMaps.MapFrame then BattleMaps.MapFrame:ApplyVisualSettings() end
+end
+
 local function MakeInformationButton(parent, x, y, title, description)
     local button = CreateFrame("Button", nil, parent)
     button:SetSize(20, 20)
@@ -34,7 +41,7 @@ end
 
 function Options:CreateUnitsPage(parent)
     local db = BattleMaps.Database:Get()
-    local playerPanelHeight = 214
+    local playerPanelHeight = 160
     local teamPanelY = -(42 + playerPanelHeight)
     local stackingPanelY = teamPanelY - 166
     local page = CreateFrame("Frame", nil, parent)
@@ -63,14 +70,14 @@ function Options:CreateUnitsPage(parent)
     end)
     resetPlayerPins:SetPoint("TOPRIGHT", page, "TOPRIGHT", -4, -2)
 
-    -- Match the three-column arrangement used by Capture Progress: FoV
-    -- controls on the first row and player-pin controls on the second.
+    -- Keep the player-marker controls first and the FoV preset controls
+    -- directly beneath them in the same three-column arrangement.
     local player = MakePanel(page, "Player Arrow", 0, -34, 684, playerPanelHeight)
-    self.playerColorControl = MakePlayerColorControl(player, 500, -84, 160)
+    self.playerColorControl = MakePlayerColorControl(player, 500, -30, 160)
     AddControlTooltip(self.playerColorControl, "Pin color",
         "Click the color swatch to open the picker for player arrows and team pins. Class follows the currently logged-in character.")
 
-    self.playerArrowSizeSlider = MakeSlider(player, "Pin size", 210, -84, 12, 128, 1,
+    self.playerArrowSizeSlider = MakeSlider(player, "Pin size", 210, -30, 12, 128, 1,
         function() return tonumber(self:GetUnitsTarget().playerArrowSize) or 22 end,
         function(value)
             self:GetUnitsTarget().playerArrowSize = value
@@ -79,13 +86,13 @@ function Options:CreateUnitsPage(parent)
         function(value) return string.format("%d px", value) end,
         250)
     self.playerTeamPinSizeNote = player:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
-    self.playerTeamPinSizeNote:SetPoint("TOPLEFT", player, "TOPLEFT", 210, -84)
-    self.playerTeamPinSizeNote:SetPoint("TOPRIGHT", player, "TOPLEFT", 460, -84)
+    self.playerTeamPinSizeNote:SetPoint("TOPLEFT", player, "TOPLEFT", 210, -30)
+    self.playerTeamPinSizeNote:SetPoint("TOPRIGHT", player, "TOPLEFT", 460, -30)
     self.playerTeamPinSizeNote:SetJustifyH("LEFT")
     self.playerTeamPinSizeNote:SetTextColor(0.96, 0.85, 0.64, 1)
     self.playerTeamPinSizeNote:Hide()
 
-    self.playerPinStyleDropdown = MakeDropdown(player, "Pin style", 10, -84, 180,
+    self.playerPinStyleDropdown = MakeDropdown(player, "Pin style", 10, -30, 180,
         function()
             return {
                 { value = "default", label = "Blizzard" },
@@ -108,23 +115,32 @@ function Options:CreateUnitsPage(parent)
     AddControlTooltip(self.playerPinStyleDropdown, "Pin style",
         "Selects the player marker artwork: Blizzard's default arrow, the BattleMaps arrow or compass, or the layered team-pin treatment.")
 
-    self.playerFovStyleDropdown = MakeDropdown(player, "FoV", 10, -30, 180,
+    self.playerFovStyleDropdown = MakeDropdown(player, "FoV", 10, -84, 180,
         function()
             return {
                 { value = "none", label = "None" },
-                { value = "soft", label = "Soft" },
-                { value = "waves", label = "Waves" },
-                { value = "spotlight", label = "Spotlight" },
+                { value = "simple", label = "Simple" },
+                { value = "coldRays", label = "Cold Rays" },
+                { value = "sunbeam", label = "Sunbeam" },
             }
         end,
         function() return self:GetUnitsTarget().playerFovStyle or "none" end,
         function(value)
             self:GetUnitsTarget().playerFovStyle = ({
                 none = true,
-                soft = true,
-                waves = true,
-                spotlight = true,
+                simple = true,
+                coldRays = true,
+                sunbeam = true,
             })[value] and value or "none"
+            if value == "simple" then
+                self:GetUnitsTarget().playerFovAlpha = 1.00
+            elseif value == "coldRays" then
+                self:GetUnitsTarget().playerFovAlpha = 1.00
+                self:GetUnitsTarget().playerFovBeamAlpha = 0.25
+            elseif value == "sunbeam" then
+                self:GetUnitsTarget().playerFovBeamAlpha = 0.25
+            end
+            if value ~= "none" then ApplyFovPresetPresentation() end
             self:Refresh()
             if BattleMaps.Pins then BattleMaps.Pins:RefreshGroup() end
         end,
@@ -132,9 +148,9 @@ function Options:CreateUnitsPage(parent)
     self.playerFovStyleDropdown.button:SetWidth(96)
     self.playerFovStyleDropdown.menu:SetWidth(96)
     AddControlTooltip(self.playerFovStyleDropdown, "FoV",
-        "Selects the field-of-view artwork. Spotlight combines under-map lighting with additive Arc and Beam layers. All FoV artwork retains its authored colors and does not receive mouse input.")
+        "Selects a field-of-view preset. Each preset uses one to three authored texture layers. Selecting a preset sets map texture opacity to 80% with an opaque black background. All FoV artwork retains its authored colors and does not receive mouse input.")
 
-    self.playerFovScaleSlider = MakeSlider(player, "FoV scale", 210, -30, 0.25, 3.00, 0.05,
+    self.playerFovScaleSlider = MakeSlider(player, "FoV scale", 210, -84, 0.25, 5.00, 0.05,
         function() return tonumber(self:GetUnitsTarget().playerFovScale) or 1.00 end,
         function(value)
             self:GetUnitsTarget().playerFovScale = value
@@ -143,9 +159,9 @@ function Options:CreateUnitsPage(parent)
         function(value) return string.format("%.2fx", value) end,
         250)
     AddControlTooltip(self.playerFovScaleSlider, "FoV scale",
-        "Scales the FoV independently of the player-pin size.")
+        "Scales the FoV independently of the player-pin size. Larger values are useful for checking the boundary feather.")
 
-    self.playerFovAlphaSlider = MakeSlider(player, "FoV alpha", 500, -30, 0.10, 1.00, 0.05,
+    self.playerFovAlphaSlider = MakeSlider(player, "FoV alpha", 500, -84, 0.10, 1.00, 0.05,
         function() return tonumber(self:GetUnitsTarget().playerFovAlpha) or 0.65 end,
         function(value)
             self:GetUnitsTarget().playerFovAlpha = value
@@ -155,55 +171,6 @@ function Options:CreateUnitsPage(parent)
         160)
     AddControlTooltip(self.playerFovAlphaSlider, "FoV alpha",
         "Changes only the FoV transparency. The artwork always retains its authored color.")
-
-    self.playerFovSpotlightAlphaSlider = MakeSlider(
-        player,
-        "Spotlight alpha",
-        10,
-        -138,
-        0.00,
-        1.00,
-        0.05,
-        function() return tonumber(self:GetUnitsTarget().playerFovSpotlightAlpha) or 1.00 end,
-        function(value)
-            self:GetUnitsTarget().playerFovSpotlightAlpha = value
-            if BattleMaps.Pins then BattleMaps.Pins:RefreshGroup() end
-        end,
-        function(value) return string.format("%d%%", math.floor((value * 100) + 0.5)) end,
-        180
-    )
-    self.playerFovBeamAlphaSlider = MakeSlider(
-        player,
-        "Beam alpha",
-        210,
-        -138,
-        0.00,
-        1.00,
-        0.05,
-        function() return tonumber(self:GetUnitsTarget().playerFovBeamAlpha) or 1.00 end,
-        function(value)
-            self:GetUnitsTarget().playerFovBeamAlpha = value
-            if BattleMaps.Pins then BattleMaps.Pins:RefreshGroup() end
-        end,
-        function(value) return string.format("%d%%", math.floor((value * 100) + 0.5)) end,
-        250
-    )
-    self.playerFovArcAlphaSlider = MakeSlider(
-        player,
-        "Arc alpha",
-        500,
-        -138,
-        0.00,
-        1.00,
-        0.05,
-        function() return tonumber(self:GetUnitsTarget().playerFovArcAlpha) or 1.00 end,
-        function(value)
-            self:GetUnitsTarget().playerFovArcAlpha = value
-            if BattleMaps.Pins then BattleMaps.Pins:RefreshGroup() end
-        end,
-        function(value) return string.format("%d%%", math.floor((value * 100) + 0.5)) end,
-        160
-    )
 
     local team = MakePanel(page, "Team Units", 0, teamPanelY, 684, 160)
     self.combatTeamCheck = MakeCheckbox(team, "Solid out of combat", 10, -30,

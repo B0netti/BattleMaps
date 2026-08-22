@@ -1554,15 +1554,11 @@ function Options:Refresh()
             tonumber(unitsSettings.teamMemberPinSize) or 12
         ))
     end
-    local fovEnabled = unitsSettings.playerFovStyle == "soft"
-        or unitsSettings.playerFovStyle == "waves"
-        or unitsSettings.playerFovStyle == "spotlight"
+    local fovEnabled = unitsSettings.playerFovStyle == "simple"
+        or unitsSettings.playerFovStyle == "coldRays"
+        or unitsSettings.playerFovStyle == "sunbeam"
     SetControlEnabled(self.playerFovScaleSlider, fovEnabled)
     SetControlEnabled(self.playerFovAlphaSlider, fovEnabled)
-    local spotlightEnabled = unitsSettings.playerFovStyle == "spotlight"
-    SetControlEnabled(self.playerFovSpotlightAlphaSlider, spotlightEnabled)
-    SetControlEnabled(self.playerFovBeamAlphaSlider, spotlightEnabled)
-    SetControlEnabled(self.playerFovArcAlphaSlider, spotlightEnabled)
     local teamStackingEnabled = unitsSettings.stackTeamPins ~= false
     local healerIconEnabled = unitsSettings.healerPinStyle ~= "ignore"
     SetControlEnabled(self.healerIconCustomColorControl, healerIconEnabled)

@@ -11,12 +11,12 @@ local _, BattleMaps = ...
 
 local AURA_TARGETS = {
     buffs = {
-        frameNames = { "ElvUIPlayerBuffs" },
-        moverNames = { "ElvUIPlayerBuffsMover" },
+        -- Current ElvUI names these public mover frames without the parent
+        -- frame prefix. Keep the older guessed names as fallbacks for forks.
+        moverNames = { "BuffsMover", "ElvUIPlayerBuffsMover" },
     },
     debuffs = {
-        frameNames = { "ElvUIPlayerDebuffs" },
-        moverNames = { "ElvUIPlayerDebuffsMover" },
+        moverNames = { "DebuffsMover", "ElvUIPlayerDebuffsMover" },
     },
 }
 
@@ -74,6 +74,21 @@ local function ResolveRelativeFrame(name)
     return _G[name] or nil
 end
 
+local function IsSecretValue(value)
+    if type(issecretvalue) ~= "function" then return false end
+
+    local ok, secret = pcall(issecretvalue, value)
+    return ok and secret == true
+end
+
+local function SafePublicNumber(value)
+    if IsSecretValue(value) then return nil end
+
+    local ok, numberValue = pcall(tonumber, value)
+    if not ok then return nil end
+    return numberValue
+end
+
 local function CaptureFramePoints(frame)
     local points = {}
     if not (BattleMaps.IsFrame and BattleMaps.IsFrame(frame)) then return points end
@@ -81,17 +96,25 @@ local function CaptureFramePoints(frame)
 
     local count = 0
     local okCount, numPoints = pcall(frame.GetNumPoints, frame)
-    if okCount then count = tonumber(numPoints) or 0 end
+    if okCount then count = SafePublicNumber(numPoints) or 0 end
 
     for index = 1, count do
         local ok, point, relativeTo, relativePoint, xOfs, yOfs = pcall(frame.GetPoint, frame, index)
-        if ok and point then
+        local x = SafePublicNumber(xOfs)
+        local y = SafePublicNumber(yOfs)
+        if ok
+            and not IsSecretValue(point)
+            and not IsSecretValue(relativeTo)
+            and not IsSecretValue(relativePoint)
+            and point
+            and x ~= nil
+            and y ~= nil then
             points[#points + 1] = {
                 point = point,
                 relativeName = GetFrameName(relativeTo),
                 relativePoint = relativePoint,
-                x = tonumber(xOfs) or 0,
-                y = tonumber(yOfs) or 0,
+                x = x,
+                y = y,
             }
         end
     end
@@ -186,9 +209,9 @@ local function RestorePlayerAuras(state)
     end
 
     local changed = false
-    -- Restore actual aura frames before movers. This leaves the visible frames in
-    -- their original relationship before any ElvUI mover anchors are restored.
-    for _, key in ipairs({ "buffsFrame", "debuffsFrame", "buffsMover", "debuffsMover" }) do
+    -- ElvUI's Retail aura containers can expose secret anchor data in PvP. Its
+    -- movers are public and own the containers' placement, so restore only them.
+    for _, key in ipairs({ "buffsMover", "debuffsMover" }) do
         changed = RestoreFrameState(auras.frames[key]) or changed
     end
 
@@ -200,29 +223,21 @@ local function ApplyPlayerAuras(state)
     if type(state) ~= "table" then return false end
 
     local anchor = GetMinimapAnchorFrame()
-    local buffsFrame = GetFrameByNameList(AURA_TARGETS.buffs.frameNames)
-    local debuffsFrame = GetFrameByNameList(AURA_TARGETS.debuffs.frameNames)
     local buffsMover = GetFrameByNameList(AURA_TARGETS.buffs.moverNames)
     local debuffsMover = GetFrameByNameList(AURA_TARGETS.debuffs.moverNames)
 
     local changed = false
 
-    -- Place player buffs in the now-hidden minimap area. Move both the ElvUI
-    -- mover and the visible frame where possible; different ElvUI versions can
-    -- favour one or the other during layout refreshes.
+    -- Retail treats the AuraContainer's points as secret while in PvP. ElvUI
+    -- already anchors each container to its mover, so move only the public
+    -- movers and preserve their public anchors for restoration.
     if buffsMover then
         changed = SetFramePoint(state, "buffsMover", buffsMover, "TOPRIGHT", anchor, "TOPRIGHT", 0, 0) or changed
     end
-    if buffsFrame then
-        changed = SetFramePoint(state, "buffsFrame", buffsFrame, "TOPRIGHT", anchor, "TOPRIGHT", 0, 0) or changed
-    end
 
-    local debuffAnchor = buffsFrame or buffsMover or anchor
+    local debuffAnchor = buffsMover or anchor
     if debuffsMover then
         changed = SetFramePoint(state, "debuffsMover", debuffsMover, "TOPRIGHT", debuffAnchor, "BOTTOMRIGHT", 0, -8) or changed
-    end
-    if debuffsFrame then
-        changed = SetFramePoint(state, "debuffsFrame", debuffsFrame, "TOPRIGHT", debuffAnchor, "BOTTOMRIGHT", 0, -8) or changed
     end
 
     return changed

@@ -2,8 +2,8 @@ local addonName, BattleMaps = ...
 
 _G.BattleMaps = BattleMaps
 BattleMaps.addonName = addonName
-BattleMaps.VERSION = "2.7.0"
-BattleMaps.BUILD = "2.7.0"
+BattleMaps.VERSION = "2.7.8"
+BattleMaps.BUILD = "2.7.8-fov-live-adaptive-mask"
 
 BattleMaps.COLORS = {
     red = { 0.77, 0.17, 0.16 },
@@ -1085,11 +1085,98 @@ BINDING_HEADER_BATTLEMAPS = "BattleMaps"
 BINDING_NAME_BATTLEMAPS_TOGGLE = "Toggle BattleMaps"
 
 SLASH_BATTLEMAPS1 = "/bmap"
-SLASH_BATTLEMAPS2 = "/bg"
 SlashCmdList.BATTLEMAPS = function(message)
     message = tostring(message or ""):lower():match("^%s*(.-)%s*$")
+    local command, argument = message:match("^(%S+)%s*(.-)$")
 
-    if message == "show" or message == "map" then
+    if command == "corealpha" or command == "core" then
+        local value = tonumber(argument)
+        if not value then
+            BattleMaps.Chat("Usage: /bmap corealpha <0-100> (or 0-1).")
+            return
+        end
+        if value > 1 then value = value / 100 end
+        if value < 0 or value > 1 then
+            BattleMaps.Chat("Core alpha must be between 0% and 100%.")
+            return
+        end
+
+        local mapID = BattleMaps.ResolveCurrentBattlegroundMapID()
+            or (BattleMaps.MapFrame and BattleMaps.MapFrame.currentMapID)
+            or (BattleMaps.Options and BattleMaps.Options.selectedMapID)
+        local settings = BattleMaps.Database and BattleMaps.Database:GetUnitsConfig(mapID)
+        if not settings then
+            BattleMaps.Chat("Core alpha could not be saved because unit settings are unavailable.")
+            return
+        end
+
+        settings.playerFovBeamAlpha = value
+        if BattleMaps.Pins then BattleMaps.Pins:RefreshGroup() end
+        if BattleMaps.Options and BattleMaps.Options.frame and BattleMaps.Options.frame:IsShown() then
+            BattleMaps.Options:Refresh()
+        end
+        BattleMaps.Chat(string.format("Core alpha set to %d%%.", math.floor((value * 100) + 0.5)))
+    elseif command == "boundary" or command == "boundarypreview" then
+        local db = BattleMaps.Database and BattleMaps.Database:Get()
+        if not db then
+            BattleMaps.Chat("Boundary preview could not be changed because settings are unavailable.")
+            return
+        end
+        db.fovBoundaryPreview = not (db.fovBoundaryPreview == true)
+        if BattleMaps.MapFrame and BattleMaps.MapFrame.UpdateFovBoundaryPreview then
+            BattleMaps.MapFrame:UpdateFovBoundaryPreview()
+        end
+        BattleMaps.Chat("FoV boundary alignment preview " .. (db.fovBoundaryPreview and "enabled." or "disabled."))
+    elseif command == "fovmask" or command == "boundarymask" then
+        local db = BattleMaps.Database and BattleMaps.Database:Get()
+        if not db then
+            BattleMaps.Chat("FoV boundary mask could not be changed because settings are unavailable.")
+            return
+        end
+        local target, state = argument:match("^(%S*)%s*(.-)$")
+        target = tostring(target or ""):lower()
+        state = tostring(state or ""):lower()
+        local enabled
+        if state == "on" or state == "enable" or state == "enabled" then
+            enabled = true
+        elseif state == "off" or state == "disable" or state == "disabled" then
+            enabled = false
+        elseif state ~= "" and state ~= "toggle" then
+            BattleMaps.Chat("Usage: /bmap fovmask [all|boundary|beam|accent] [on|off].")
+            return
+        end
+
+        local boundary = target == "boundary" or target == "cone"
+        local beam = target == "beam" or target == "core" or target == "detail"
+        local accent = target == "accent" or target == "arc"
+        local all = target == "" or target == "all"
+        if not boundary and not beam and not accent and not all then
+            BattleMaps.Chat("Usage: /bmap fovmask [all|boundary|beam|accent] [on|off].")
+            return
+        end
+        if all or boundary then
+            db.fovBoundaryMask = enabled ~= nil and enabled or not (db.fovBoundaryMask == true)
+        end
+        if all or beam then
+            db.fovBeamMask = enabled ~= nil and enabled or not (db.fovBeamMask ~= false)
+        end
+        if all or accent then
+            db.fovAccentMask = enabled ~= nil and enabled or not (db.fovAccentMask ~= false)
+        end
+        if BattleMaps.Pins then BattleMaps.Pins:RefreshGroup() end
+        local mapID = BattleMaps.ResolveCurrentBattlegroundMapID()
+            or (BattleMaps.MapFrame and BattleMaps.MapFrame.currentMapID)
+            or (BattleMaps.Options and BattleMaps.Options.selectedMapID)
+        local mapName = BattleMaps.Battlegrounds and BattleMaps.Battlegrounds:GetName(mapID)
+            or "Current map"
+        BattleMaps.Chat(string.format(
+            "%s FoV masks: boundary %s, beam %s, accent %s.",
+            mapName,
+            db.fovBoundaryMask and "on" or "off",
+            db.fovBeamMask ~= false and "on" or "off",
+            db.fovAccentMask ~= false and "on" or "off"
+        ))
+    elseif message == "show" or message == "map" then
         BattleMaps.MapFrame:ShowCurrentOrSelected()
     elseif message == "hide" then
         BattleMaps.MapFrame:Hide()
@@ -1138,6 +1225,30 @@ SlashCmdList.BATTLEMAPS = function(message)
     elseif message == "stackcheck" or message == "stackingcheck" then
         if BattleMaps.Pins and BattleMaps.Pins.PrintTeamStackDebug then
             BattleMaps.Pins:PrintTeamStackDebug()
+        end
+    elseif message == "fovdiag" or message == "fovcheck" then
+        if BattleMaps.Pins and BattleMaps.Pins.PrintFovDiagnostics then
+            BattleMaps.Pins:PrintFovDiagnostics()
+        else
+            BattleMaps.Chat("FoV diagnostics are unavailable.")
+        end
+    elseif command == "fovcliptest" or command == "fovstripetest" then
+        local requested
+        if argument == "on" or argument == "enable" or argument == "enabled" then
+            requested = true
+        elseif argument == "off" or argument == "disable" or argument == "disabled" then
+            requested = false
+        elseif argument == "" or argument == "toggle" then
+            requested = not (BattleMaps.Pins and BattleMaps.Pins.fovClipDiagnosticEnabled == true)
+        else
+            BattleMaps.Chat("Usage: /bmap fovcliptest [on|off].")
+            return
+        end
+
+        if BattleMaps.Pins and BattleMaps.Pins.SetFovClipDiagnosticEnabled then
+            BattleMaps.Pins:SetFovClipDiagnosticEnabled(requested)
+        else
+            BattleMaps.Chat("FoV clip test is unavailable.")
         end
     elseif message == "deathmarkertest" or message == "deathtest" then
         local shown = BattleMaps.Pins and BattleMaps.Pins.ShowTeamDeathMarkerTest

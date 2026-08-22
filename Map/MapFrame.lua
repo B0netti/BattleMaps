@@ -27,6 +27,15 @@ local MAP_CANVAS_LEVEL_OFFSET = 10
 local FOV_OVERLAY_LAYER_LEVEL_OFFSET = 15
 local PIN_LAYER_LEVEL_OFFSET = 20
 
+-- These are deliberately an alignment aid only. A MaskTexture follows the
+-- transformed FoV texture rather than this map canvas, so it cannot provide a
+-- fixed world-space clip without distorting the rotating cone.
+local FOV_BOUNDARY_PREVIEW_TEXTURES = {
+    [112] = "Interface\\AddOns\\BattleMaps\\Media\\FovBoundaries\\fov_boundary_arathi.tga",
+    [1366] = "Interface\\AddOns\\BattleMaps\\Media\\FovBoundaries\\fov_boundary_arathi.tga",
+}
+local FOV_BOUNDARY_PREVIEW_ALPHA = 0.32
+
 local function GetTemplate()
     return BackdropTemplateMixin and "BackdropTemplate" or nil
 end
@@ -332,6 +341,12 @@ function MapFrame:Create()
     fovOverlayLayer:SetFrameLevel(viewport:GetFrameLevel() + FOV_OVERLAY_LAYER_LEVEL_OFFSET)
     fovOverlayLayer:EnableMouse(false)
 
+    local fovBoundaryPreview = fovOverlayLayer:CreateTexture(nil, "OVERLAY")
+    self.fovBoundaryPreview = fovBoundaryPreview
+    fovBoundaryPreview:SetBlendMode("BLEND")
+    fovBoundaryPreview:SetVertexColor(0.30, 0.80, 1.00, FOV_BOUNDARY_PREVIEW_ALPHA)
+    fovBoundaryPreview:Hide()
+
     local emptyText = viewport:CreateFontString(nil, "OVERLAY", "GameFontHighlight")
     self.emptyText = emptyText
     emptyText:SetPoint("CENTER")
@@ -566,6 +581,26 @@ function MapFrame:ApplyVisualSettings()
     end
     if BattleMaps.MapRenderer then BattleMaps.MapRenderer:ApplyTextureAlpha() end
     self:UpdateViewportChromeInset(tonumber(self.chromeAlpha) or 1, true)
+end
+
+function MapFrame:UpdateFovBoundaryPreview()
+    local preview = self.fovBoundaryPreview
+    if not preview or not self.canvas then return end
+
+    local db = BattleMaps.Database and BattleMaps.Database:Get()
+    local texture = db and db.fovBoundaryPreview == true
+        and FOV_BOUNDARY_PREVIEW_TEXTURES[tonumber(self.currentMapID)]
+        or nil
+    if not texture then
+        preview:Hide()
+        return
+    end
+
+    preview:ClearAllPoints()
+    preview:SetPoint("TOPLEFT", self.canvas, "TOPLEFT", 0, 0)
+    preview:SetPoint("BOTTOMRIGHT", self.canvas, "BOTTOMRIGHT", 0, 0)
+    preview:SetTexture(texture)
+    preview:Show()
 end
 
 function MapFrame:IsPointerOverFrame()
@@ -1300,6 +1335,7 @@ function MapFrame:SetMapID(mapID, forcePlacement)
     self:UpdateTitleText(mapID)
     BattleMaps.MapRenderer:SetMapID(mapID)
     self:LayoutView()
+    self:UpdateFovBoundaryPreview()
     if BattleMaps.Pins then BattleMaps.Pins:RefreshAll(true) end
     return true
 end
@@ -1536,6 +1572,7 @@ function MapFrame:LayoutView()
     self.canvas:SetPoint("TOPLEFT", self.viewport, "TOPLEFT", left, -top)
     self.canvas:SetSize(canvasWidth, canvasHeight)
     BattleMaps.MapRenderer:Layout()
+    self:UpdateFovBoundaryPreview()
     if BattleMaps.Pins then BattleMaps.Pins:LayoutAll() end
 end
 
@@ -1587,7 +1624,7 @@ function MapFrame:OnUpdate(elapsed)
 
     -- Objective texture pulses and Test Mode player-facing rotations are
     -- lightweight visual updates that need frame-rate refreshes to remain
-    -- smooth. Keep all provider/pin rebuild work on the 0.10-second throttle.
+    -- smooth. Provider and pin reconciliation use their own throttles below.
     if BattleMaps.Pins and self.frame:IsShown()
         and BattleMaps.Pins.UpdateSmoothObjectiveAnimations then
         BattleMaps.Pins:UpdateSmoothObjectiveAnimations()

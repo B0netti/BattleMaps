@@ -4,7 +4,7 @@ BattleMaps is a World of Warcraft Retail PvP addon that provides a configurable 
 
 ## Current status
 
-BattleMaps is under active development. The current source version is **2.7.0** and targets World of Warcraft Retail interface **120100**.
+BattleMaps is under active development. The current source version is **2.7.8** and targets World of Warcraft Retail interface **120100**.
 
 ## Highlights
 
@@ -35,7 +35,6 @@ This repository currently contains the addon source rather than a packaged relea
 ## Getting started
 
 - Type `/bmap` to open BattleMaps settings.
-- `/bg` is an alias for the same settings page.
 - Use **Test Mode** in the options to preview supported battleground layouts and visual settings.
 - Use `Shift-M` to open Blizzard's native battlefield map.
 

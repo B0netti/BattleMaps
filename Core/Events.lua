@@ -105,7 +105,7 @@ Events:SetScript("OnEvent", function(_, event, ...)
         if BattleMaps.ApplyMinimapVisibility then BattleMaps.ApplyMinimapVisibility() end
 
         if db.showLoginMessage then
-            BattleMaps.Chat("loaded (" .. BattleMaps.BUILD .. "). /bg or minimap icon opens settings.")
+            BattleMaps.Chat("loaded (" .. BattleMaps.BUILD .. "). /bmap or minimap icon opens settings.")
         end
         DelayedLocationRefresh()
         if C_Timer and C_Timer.After and BattleMaps.Notifications then

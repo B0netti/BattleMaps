@@ -20,9 +20,7 @@ local PLAYER_PIN_DEFAULTS = {
     playerFovStyle = "none",
     playerFovScale = 1.00,
     playerFovAlpha = 0.65,
-    playerFovSpotlightAlpha = 1.00,
     playerFovBeamAlpha = 1.00,
-    playerFovArcAlpha = 1.00,
     teamMemberPinSize = PIN_DEFAULTS.teamMemberPinSize,
     healerPinSize = PIN_DEFAULTS.healerPinSize,
     teamPinBorderScale = 1.00,
@@ -118,6 +116,11 @@ local ROOT_DEFAULTS = {
     frameBackgroundColor = { r = 0.015, g = 0.015, b = 0.015, a = 0.12 },
     fadeMapHeader = true,
     mapTextureAlpha = 0.90,
+    fovBoundaryPreview = false,
+    fovBoundaryMask = true,
+    fovBeamMask = true,
+    fovAccentMask = true,
+    fovMaskSettingsVersion = 2,
     highlightFriendlyHealers = true,
     useCustomHealerIcon = true,
     useCustomTeamPinTextures = true,
@@ -179,9 +182,7 @@ local ROOT_DEFAULTS = {
     playerFovStyle = PLAYER_PIN_DEFAULTS.playerFovStyle,
     playerFovScale = PLAYER_PIN_DEFAULTS.playerFovScale,
     playerFovAlpha = PLAYER_PIN_DEFAULTS.playerFovAlpha,
-    playerFovSpotlightAlpha = PLAYER_PIN_DEFAULTS.playerFovSpotlightAlpha,
     playerFovBeamAlpha = PLAYER_PIN_DEFAULTS.playerFovBeamAlpha,
-    playerFovArcAlpha = PLAYER_PIN_DEFAULTS.playerFovArcAlpha,
     teamMemberPinSize = PIN_DEFAULTS.teamMemberPinSize,
     healerPinSize = PIN_DEFAULTS.healerPinSize,
     teamPinBorderScale = PLAYER_PIN_DEFAULTS.teamPinBorderScale,
@@ -906,14 +907,15 @@ end
 local function NormalizePlayerFovSettings(settings)
     if type(settings) ~= "table" then return end
 
-    -- Migrate the retired checkbox once. An enabled cone becomes the Soft FoV
+    -- Migrate the retired checkbox once. An enabled cone becomes the Simple FoV
     -- style; disabled or absent cones become None. Scale and alpha retain the
     -- user's previous values under their new FoV setting names.
     local hasLegacySettings = settings.showPlayerVisionCone ~= nil
         or settings.playerVisionConeScale ~= nil
         or settings.playerVisionConeAlpha ~= nil
-    if settings.playerFovStyleVersion ~= 1 and hasLegacySettings then
-        settings.playerFovStyle = settings.showPlayerVisionCone == true and "soft" or "none"
+    local styleVersion = tonumber(settings.playerFovStyleVersion) or 0
+    if styleVersion < 1 and hasLegacySettings then
+        settings.playerFovStyle = settings.showPlayerVisionCone == true and "simple" or "none"
         settings.playerFovScale = tonumber(settings.playerVisionConeScale)
             or tonumber(settings.playerFovScale)
             or PLAYER_PIN_DEFAULTS.playerFovScale
@@ -922,21 +924,45 @@ local function NormalizePlayerFovSettings(settings)
             or PLAYER_PIN_DEFAULTS.playerFovAlpha
     end
 
-    settings.playerFovStyle = ({ none = true, soft = true, waves = true, spotlight = true })[settings.playerFovStyle]
+    -- Soft is superseded by Simple. Waves has been removed without a direct
+    -- replacement, so it is safely disabled rather than silently selecting a
+    -- visually different variant.
+    if styleVersion < 2 then
+        if settings.playerFovStyle == "soft" then
+            settings.playerFovStyle = "simple"
+        elseif settings.playerFovStyle == "waves" then
+            settings.playerFovStyle = "none"
+        end
+    end
+
+    if styleVersion < 3 then
+        if settings.playerFovStyle == "split45" then
+            settings.playerFovStyle = "coldRays"
+        elseif settings.playerFovStyle == "spotlight" then
+            settings.playerFovStyle = "sunbeam"
+        end
+    end
+
+    if styleVersion < 4 then
+        if settings.playerFovStyle == "cone" then
+            settings.playerFovStyle = "simple"
+            settings.playerFovAlpha = 1.00
+        end
+        if settings.playerFovStyle == "coldRays" or settings.playerFovStyle == "sunbeam" then
+            settings.playerFovBeamAlpha = 0.25
+        end
+    end
+
+    settings.playerFovStyle = ({ none = true, simple = true, coldRays = true, sunbeam = true })[settings.playerFovStyle]
         and settings.playerFovStyle or PLAYER_PIN_DEFAULTS.playerFovStyle
     settings.playerFovScale = BattleMaps.Clamp(
         tonumber(settings.playerFovScale) or PLAYER_PIN_DEFAULTS.playerFovScale,
         0.25,
-        3.00
+        5.00
     )
     settings.playerFovAlpha = BattleMaps.Clamp(
         tonumber(settings.playerFovAlpha) or PLAYER_PIN_DEFAULTS.playerFovAlpha,
         0.10,
-        1.00
-    )
-    settings.playerFovSpotlightAlpha = BattleMaps.Clamp(
-        tonumber(settings.playerFovSpotlightAlpha) or PLAYER_PIN_DEFAULTS.playerFovSpotlightAlpha,
-        0.00,
         1.00
     )
     settings.playerFovBeamAlpha = BattleMaps.Clamp(
@@ -944,15 +970,12 @@ local function NormalizePlayerFovSettings(settings)
         0.00,
         1.00
     )
-    settings.playerFovArcAlpha = BattleMaps.Clamp(
-        tonumber(settings.playerFovArcAlpha) or PLAYER_PIN_DEFAULTS.playerFovArcAlpha,
-        0.00,
-        1.00
-    )
-    settings.playerFovStyleVersion = 1
+    settings.playerFovStyleVersion = 5
     settings.showPlayerVisionCone = nil
     settings.playerVisionConeScale = nil
     settings.playerVisionConeAlpha = nil
+    settings.playerFovSpotlightAlpha = nil
+    settings.playerFovArcAlpha = nil
 end
 
 local function MigrateLegacyPinBuckets(config)
@@ -1080,9 +1103,33 @@ function Database:Initialize()
         or 0
     local previousCustomPlayerArrow = type(BattleMapsDB) == "table"
         and BattleMapsDB.useCustomPlayerArrow
+    local previousFovMaskSettingsVersion = type(BattleMapsDB) == "table"
+        and tonumber(BattleMapsDB.fovMaskSettingsVersion)
+        or 0
+    local previousFovBoundaryMask = type(BattleMapsDB) == "table"
+        and BattleMapsDB.fovBoundaryMask == true
+    local hadFovBeamMask = type(BattleMapsDB) == "table"
+        and BattleMapsDB.fovBeamMask ~= nil
 
     BattleMapsDB = CopyDefaults(ROOT_DEFAULTS, BattleMapsDB)
     BattleMapsDB.maps = BattleMapsDB.maps or {}
+
+    -- The first mask experiment had one boundary toggle. Preserve its enabled
+    -- state for the new beam detail mask so existing Arathi test setups keep
+    -- their visible effect after upgrading.
+    if previousFovMaskSettingsVersion < 1 and not hadFovBeamMask then
+        BattleMapsDB.fovBeamMask = previousFovBoundaryMask
+    end
+    -- Version 2 promotes the map-space FoV masks from an experiment to the
+    -- normal renderer. The prior controls were debug-only, so make every
+    -- authored FoV pass clip by default rather than leaving the primary cone
+    -- and beam unmasked on existing profiles.
+    if previousFovMaskSettingsVersion < 2 then
+        BattleMapsDB.fovBoundaryMask = true
+        BattleMapsDB.fovBeamMask = true
+        BattleMapsDB.fovAccentMask = true
+    end
+    BattleMapsDB.fovMaskSettingsVersion = 2
 
     if BattleMapsDB.useGlobalPlayerPinSettings == nil then
         BattleMapsDB.useGlobalPlayerPinSettings = BattleMapsDB.useGlobalPinSettings ~= false
@@ -1190,6 +1237,10 @@ function Database:Initialize()
 
     BattleMapsDB.fadeMapHeader = BattleMapsDB.fadeMapHeader ~= false
     BattleMapsDB.mapTextureAlpha = BattleMaps.Clamp(tonumber(BattleMapsDB.mapTextureAlpha) or 1, 0.20, 1.00)
+    BattleMapsDB.fovBoundaryPreview = BattleMapsDB.fovBoundaryPreview == true
+    BattleMapsDB.fovBoundaryMask = BattleMapsDB.fovBoundaryMask == true
+    BattleMapsDB.fovBeamMask = BattleMapsDB.fovBeamMask ~= false
+    BattleMapsDB.fovAccentMask = BattleMapsDB.fovAccentMask ~= false
     BattleMapsDB.worldMapPinScale = BattleMaps.Clamp(
         tonumber(BattleMapsDB.worldMapPinScale) or 1.00, 0.75, 2.00)
     BattleMapsDB.showFlagCarrierTrail = BattleMapsDB.showFlagCarrierTrail ~= false
@@ -1726,11 +1777,8 @@ function Database:ResetPlayerPins(mapID)
     target.playerFovStyle = source.playerFovStyle or PLAYER_PIN_DEFAULTS.playerFovStyle
     target.playerFovScale = source.playerFovScale or PLAYER_PIN_DEFAULTS.playerFovScale
     target.playerFovAlpha = source.playerFovAlpha or PLAYER_PIN_DEFAULTS.playerFovAlpha
-    target.playerFovSpotlightAlpha = source.playerFovSpotlightAlpha
-        or PLAYER_PIN_DEFAULTS.playerFovSpotlightAlpha
     target.playerFovBeamAlpha = source.playerFovBeamAlpha or PLAYER_PIN_DEFAULTS.playerFovBeamAlpha
-    target.playerFovArcAlpha = source.playerFovArcAlpha or PLAYER_PIN_DEFAULTS.playerFovArcAlpha
-    target.playerFovStyleVersion = 1
+    target.playerFovStyleVersion = 5
     target.showPlayerVisionCone = nil
     target.playerVisionConeScale = nil
     target.playerVisionConeAlpha = nil

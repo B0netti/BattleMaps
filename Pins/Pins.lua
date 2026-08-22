@@ -21,6 +21,7 @@ local Pins = {
     poiElapsed = 1,
     scenarioElapsed = 1,
     vignetteElapsed = 1,
+    unitElapsed = 1,
     dummyPins = {},
     dummyTeamPins = {},
     dummyStationaryPins = {},
@@ -71,6 +72,15 @@ local PIN_ZOOM_RESPONSE = 0.50
 local CUSTOM_AREA_POI_VISUAL_SIZE = 16
 
 local FLAG_REFRESH_INTERVAL = 0.20
+-- UnitPositionFrame continues to update the restricted player and group
+-- positions natively between these passes. BattleMaps only needs to
+-- reconcile its extra layers and stack layout at this cadence.
+local UNIT_REFRESH_INTERVAL = 0.20
+
+-- VIGNETTES_UPDATED triggers an immediate refresh. This is only a defensive
+-- fallback for transitional provider updates; Seething Shore has its own
+-- dedicated controller.
+local VIGNETTE_REFRESH_INTERVAL = 0.25
 
 local DEEPHAUL_RAVINE_MAP_ID = 2345
 local DEEPHAUL_CRYSTAL_PULSE_SECONDS = 2.10
@@ -2409,15 +2419,29 @@ function Pins:LayoutAll()
     end
     self:HideDummyPins()
 
-    -- Refresh unit sizes immediately when the zoom changes. RefreshUnits only
-    -- performs a full restricted-frame rebuild when an effective size differs.
-    self:RefreshUnits(false)
+    local zoomScale = self:GetPinZoomScale()
+    local mapFrame = BattleMaps.MapFrame
+    local canvas = mapFrame and mapFrame.canvas
+    local canvasWidth, canvasHeight = canvas and canvas:GetSize()
+    local zoomChanged = not self.lastPinZoomScale
+        or math.abs(self.lastPinZoomScale - zoomScale) > 0.0001
+    local unitLayoutChanged = zoomChanged
+        or self.lastUnitLayoutCanvasWidth ~= canvasWidth
+        or self.lastUnitLayoutCanvasHeight ~= canvasHeight
+
+    -- Unit frames are anchored to the canvas, so panning moves them with the
+    -- map automatically. Reconcile only when zoom or canvas size changes;
+    -- normal live position updates remain Blizzard-owned.
+    if unitLayoutChanged then
+        self.lastUnitLayoutCanvasWidth = canvasWidth
+        self.lastUnitLayoutCanvasHeight = canvasHeight
+        self:RefreshUnits(false)
+    end
 
     -- Objective providers run on timers, but zoom changes should resize them
     -- immediately. Avoid repeating their API work during ordinary panning by
     -- refreshing only when the half-strength zoom multiplier changes.
-    local zoomScale = self:GetPinZoomScale()
-    if not self.lastPinZoomScale or math.abs(self.lastPinZoomScale - zoomScale) > 0.0001 then
+    if zoomChanged then
         self.lastPinZoomScale = zoomScale
         self:RefreshVehicles()
         self:RefreshFlags()
@@ -2459,6 +2483,7 @@ function Pins:RefreshAll(forceObjectives)
         self.poiElapsed = 0
         self.scenarioElapsed = 0
         self.vignetteElapsed = 0
+        self.unitElapsed = 0
     end
 end
 
@@ -2474,7 +2499,6 @@ function Pins:OnUpdate()
     end
     self:HideDummyPins()
 
-    self:RefreshUnits(false)
     self:UpdatePingAnimations()
     if self.UpdateObjectiveCaptureTimerVisuals
         and ((self.HasActiveObjectiveTimerVisuals and self:HasActiveObjectiveTimerVisuals())
@@ -2490,6 +2514,12 @@ function Pins:OnUpdate()
     self.poiElapsed = self.poiElapsed + 0.10
     self.scenarioElapsed = self.scenarioElapsed + 0.10
     self.vignetteElapsed = self.vignetteElapsed + 0.10
+    self.unitElapsed = self.unitElapsed + 0.10
+
+    if self.unitElapsed >= UNIT_REFRESH_INTERVAL then
+        self.unitElapsed = 0
+        self:RefreshUnits(false)
+    end
 
     if self.vehicleElapsed >= 0.25 then
         self.vehicleElapsed = 0
@@ -2513,7 +2543,7 @@ function Pins:OnUpdate()
         self:RefreshScenarios()
     end
 
-    if self.vignetteElapsed >= 0.10 then
+    if self.vignetteElapsed >= VIGNETTE_REFRESH_INTERVAL then
         self.vignetteElapsed = 0
         self:RefreshVignettes()
     end

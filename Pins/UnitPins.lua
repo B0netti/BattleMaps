@@ -34,43 +34,260 @@ local CUSTOM_HEALER_PIN_TEXTURE = "Interface\\AddOns\\BattleMaps\\Media\\healer.
 local DEFAULT_PLAYER_ARROW_TEXTURE = "UI-WorldMapArrow"
 local CUSTOM_PLAYER_ARROW_TEXTURE = "Interface\\AddOns\\BattleMaps\\Media\\player_arrow.tga"
 local CUSTOM_PLAYER_COMPASS_TEXTURE = "Interface\\AddOns\\BattleMaps\\Media\\player_compass.tga"
+local PLAYER_FOV_LAYER_TEXTURES = {
+    -- Semantic FoV artwork used by the current Sunbeam development stack.
+    -- Keep these names map-independent: map-specific shaping belongs in masks.
+    core = "Interface\\AddOns\\BattleMaps\\Media\\FoV\\Layers\\fov_core.tga",
+    terrain = "Interface\\AddOns\\BattleMaps\\Media\\FoV\\Layers\\fov_terrain.tga",
+    proximity = "Interface\\AddOns\\BattleMaps\\Media\\FoV\\Layers\\fov_proximity.tga",
+}
+
 local PLAYER_FOV_STYLES = {
-    soft = {
+    -- The renderer still uses its proven under/arc/beam frame slots so live BG
+    -- positioning and rotation remain unchanged. maskKind now describes the
+    -- semantic role of each pass: core, terrain, or proximity.
+    simple = {
         under = {
-            texture = "Interface\\AddOns\\BattleMaps\\Media\\fov_soft.tga",
-            blendMode = "BLEND",
-            aspect = 1,
-        },
-    },
-    waves = {
-        under = {
-            texture = "Interface\\AddOns\\BattleMaps\\Media\\fov_waves.tga",
-            blendMode = "BLEND",
-            aspect = 1,
-        },
-    },
-    spotlight = {
-        under = {
-            texture = "Interface\\AddOns\\BattleMaps\\Media\\fov_spotlight.tga",
-            blendMode = "BLEND",
-            aspect = 1,
-            alphaSetting = "playerFovSpotlightAlpha",
-        },
-        arc = {
-            texture = "Interface\\AddOns\\BattleMaps\\Media\\fov_arc.tga",
+            texture = "Interface\\AddOns\\BattleMaps\\Media\\fov_cone_simple.tga",
             blendMode = "ADD",
             aspect = 1,
-            alphaSetting = "playerFovArcAlpha",
+            maskKind = "core",
+        },
+    },
+    coldRays = {
+        under = {
+            texture = "Interface\\AddOns\\BattleMaps\\Media\\fov_cone_cool.tga",
+            blendMode = "ADD",
+            aspect = 1,
+            maskKind = "core",
         },
         beam = {
-            texture = "Interface\\AddOns\\BattleMaps\\Media\\fov_beam.tga",
+            texture = "Interface\\AddOns\\BattleMaps\\Media\\fov_core_split.tga",
             blendMode = "ADD",
             aspect = 1,
             alphaSetting = "playerFovBeamAlpha",
+            maskKind = "terrain",
+        },
+        arc = {
+            texture = "Interface\\AddOns\\BattleMaps\\Media\\fov_accent_wispy.tga",
+            blendMode = "ADD",
+            aspect = 1,
+            alphaMultiplier = 0.10,
+            maskKind = "proximity",
+        },
+    },
+    sunbeam = {
+        -- Preserve the existing Sunbeam presentation exactly while replacing
+        -- its authored files with semantic layer roles:
+        --   core      = BLEND, main FoV alpha
+        --   terrain   = ADD, main FoV alpha * Beam alpha
+        --   proximity = ADD, main FoV alpha * 0.10
+        under = {
+            texture = PLAYER_FOV_LAYER_TEXTURES.core,
+            blendMode = "BLEND",
+            aspect = 1,
+            maskKind = "core",
+        },
+        beam = {
+            texture = PLAYER_FOV_LAYER_TEXTURES.terrain,
+            blendMode = "ADD",
+            aspect = 1,
+            alphaSetting = "playerFovBeamAlpha",
+            maskKind = "terrain",
+        },
+        arc = {
+            texture = PLAYER_FOV_LAYER_TEXTURES.proximity,
+            blendMode = "ADD",
+            aspect = 1,
+            alphaMultiplier = 0.10,
+            maskKind = "proximity",
         },
     },
 }
 local PLAYER_FOV_LAYER_ORDER = { "under", "arc", "beam" }
+
+-- Map-space masks are keyed by semantic layer role. Every supported non-epic
+-- battleground follows the same core/terrain/proximity contract. Keeping the
+-- folder name separate from the numeric aliases makes it straightforward to
+-- author a map once even when Blizzard exposes more than one ID for it.
+local function BuildPlayerFovMaskSet(folder)
+    local root = "Interface\\AddOns\\BattleMaps\\Media\\FoV\\Masks\\" .. folder .. "\\"
+    return {
+        core = root .. "core_mask.tga",
+        terrain = root .. "terrain_mask.tga",
+        proximity = root .. "proximity_mask.tga",
+    }
+end
+
+local PLAYER_FOV_MASK_SETS = {
+    ArathiBasin = BuildPlayerFovMaskSet("ArathiBasin"),
+    BattleForGilneas = BuildPlayerFovMaskSet("BattleForGilneas"),
+    DeepwindGorge = BuildPlayerFovMaskSet("DeepwindGorge"),
+    DeephaulRavine = BuildPlayerFovMaskSet("DeephaulRavine"),
+    EyeOfTheStorm = BuildPlayerFovMaskSet("EyeOfTheStorm"),
+    SeethingShore = BuildPlayerFovMaskSet("SeethingShore"),
+    SilvershardMines = BuildPlayerFovMaskSet("SilvershardMines"),
+    TempleOfKotmogu = BuildPlayerFovMaskSet("TempleOfKotmogu"),
+    TwinPeaks = BuildPlayerFovMaskSet("TwinPeaks"),
+    WarsongGulch = BuildPlayerFovMaskSet("WarsongGulch"),
+}
+
+local PLAYER_FOV_MAP_MASKS = {
+    [112] = PLAYER_FOV_MASK_SETS.ArathiBasin,       -- Arathi Basin legacy/config
+    [1366] = PLAYER_FOV_MASK_SETS.ArathiBasin,      -- Arathi Basin modern UI map
+
+    [275] = PLAYER_FOV_MASK_SETS.BattleForGilneas,  -- Battle for Gilneas
+    [761] = PLAYER_FOV_MASK_SETS.BattleForGilneas,  -- Battle for Gilneas alias
+
+    [1576] = PLAYER_FOV_MASK_SETS.DeepwindGorge,     -- Deepwind Gorge
+    [2345] = PLAYER_FOV_MASK_SETS.DeephaulRavine,    -- Deephaul Ravine
+    [210] = PLAYER_FOV_MASK_SETS.EyeOfTheStorm,      -- Eye of the Storm config
+
+    [907] = PLAYER_FOV_MASK_SETS.SeethingShore,      -- Seething Shore
+    [1803] = PLAYER_FOV_MASK_SETS.SeethingShore,     -- Seething Shore alias
+
+    [423] = PLAYER_FOV_MASK_SETS.SilvershardMines,   -- Silvershard Mines
+    [727] = PLAYER_FOV_MASK_SETS.SilvershardMines,   -- Silvershard Mines alias
+
+    [417] = PLAYER_FOV_MASK_SETS.TempleOfKotmogu,    -- Temple of Kotmogu
+    [998] = PLAYER_FOV_MASK_SETS.TempleOfKotmogu,    -- Temple of Kotmogu alias
+
+    [726] = PLAYER_FOV_MASK_SETS.TwinPeaks,           -- Twin Peaks
+
+    [206] = PLAYER_FOV_MASK_SETS.WarsongGulch,        -- Warsong Gulch legacy/config
+    [1339] = PLAYER_FOV_MASK_SETS.WarsongGulch,       -- Warsong Gulch modern UI map
+}
+
+-- UnitPositionFrame keeps live battleground coordinates inside the client and
+-- does not expose its rendered pin as a Lua Texture. Retail does, however,
+-- clip an addon-owned UnitPositionFrame to an ordinary parent's rectangle.
+-- These compact strings are adaptive midpoint contours compiled from the alpha
+-- channels of the corresponding map-space TGA masks. Each partial definition
+-- starts with its columns/rows; every four-character run is x, y, width, height
+-- in grid cells. The compiler selects the finest map-proportional grid that
+-- stays within the native-frame budget for that layer.
+local PLAYER_FOV_LIVE_MASK_MAX_GRID_SIZE = 64
+local PLAYER_FOV_LIVE_MASK_ALPHABET = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ-_~"
+local PLAYER_FOV_LIVE_MASK_MAX_RECTS = 32
+local PLAYER_FOV_LIVE_MASK_FULL_RECTANGLES = {
+    { x = 0, y = 0, width = 1, height = 1 },
+}
+local PLAYER_FOV_LIVE_MASK_GEOMETRY_SOURCE = {
+    ArathiBasin = {
+        core = "64x43:j521h681h7b1h8d1w861h9n1hao2icm2jel1kfl7lmk1lnl1mol2mqm1mr51srh1usf1ytb1zua1Av91",
+        terrain = "40x27:e421e531d611g621b711h711a811d921da31db21q913fc11qc21nc12bd12he11rd12bf21if21ig41cg12lh51ci51mi31ej21hj41nj11lk11",
+        proximity = "empty",
+    },
+    BattleForGilneas = {
+        core = "64x43:u4d1q5j1n6n1l7p1k8p1i9q1har2gcs1gdt1gev1gfx2ghy1gix1gju1gks1hlr4ipr2irs1hsu1gtv1euy1dvz1cwA2cyz1dzy1dAw1fBr1gCo1iDm1mEb1zE41",
+        terrain = "full",
+        proximity = "full",
+    },
+    DeephaulRavine = {
+        core = "64x43:e9a18ao16br16cs27er27gt17hv17ix16jA15kD25m71gmt16n21gnu1gov1hpv1oqq1prs1qst1rtt1rus2swo1vxk1xyh1yzg1AAc1CB41HB11",
+        terrain = "full",
+        proximity = "full",
+    },
+    DeepwindGorge = {
+        core = "48x32:f141e271v241d3b1u361d4f1t481e5n1e6o1b7r188u179w16ax16by16cz15dA15eB15fC26hB18iz19jy1akx2cmu1cnt1cor1cpo2crn1es21msd1ot31st61",
+        terrain = "24x16:7131f121a211f2319311c311g3314412a5313611b6217514a811k712b911g921j9215a31ba316b31cb11ha42hc216c72ce21",
+        proximity = "full",
+    },
+    EyeOfTheStorm = {
+        core = "64x43:s861q991paa1pbb3pec2pgd1ohe2ojd1pk81tl41tm51sn91ooe1npf1oqe2psd1ptc1qub2qwa1rx91sy71",
+        terrain = "64x43:r781p8b1o9c1oad1nbe2ndf2nfg1ngh4mki7nrg3ouf1ove2pxd1pyc1qza1rA71",
+        proximity = "full",
+    },
+    SeethingShore = {
+        core = "64x43:m621v651M691k7l1K7c1i8E1g9F1gaG2ecI1cdK1beL3bhM2ajN19kO4aoN29qN2asM1dtJ1euH2ewI2ey71fz51nyz2oAx2rCs1",
+        terrain = "32x21:8141h141o16162o153k144i135h126j127a1f761289119910a91ca312b61bb51ib41ac51jc213c52ad313ea24ga25i919j51bk31",
+        proximity = "full",
+    },
+    SilvershardMines = {
+        core = "64x43:g3p1f4r1J471f5D2f7E2f9D1eaD1ebC1ecB1ddB1ceC1afE18gF17hG16iH16jG27lF28nE19oD1apC1dqA1frz1gsz1htz6hzy2hBx1hCj1FC71iDf1HD31jEc1kF91",
+        terrain = "40x27:i341h461f5c1t521d6j1c7j1a8l189n16ao15b71ibc15c61icb15d51hdc17e21ged1ffa1eg91rf22eh81qh31qi41ei43dl51pj53qm31cm62rn11co51dp21",
+        proximity = "full",
+    },
+    TempleOfKotmogu = {
+        core = "64x43:q971mag1kbo1ics1gdv1gew1ffy16f42fgz1Pg416h51ehG16iO55nP15oQ26q61dqI17r31Qr41Rs21erz6fxx2izs1mA61vA81",
+        terrain = "24x16:8221d211d3525363c561m51126215631b611f641l6211772e7922961f9812a115a41aa31fa31ka31cb615b62dc516d41dd618e21he11",
+        proximity = "full",
+    },
+    TwinPeaks = {
+        core = "64x43:v341t4b1s5e1r6f1r7g1q8h2qag1pbh1och3nfi1ogh2oii1pjh2oli4npj3nsi2ouh1pvg1pwh3qzg1qAf1rBd1tC81",
+        terrain = "40x27:g021d111f171c2b1d3a1d492e681f771p721f8c2fab1fb81fc71ed61qd31be71oe51bf61mf71cg51kg81eh31ei41kh72fj21kj11gk11pj22ol31nm52po31",
+        proximity = "full",
+    },
+    WarsongGulch = {
+        core = "64x43:s091s1a1r2b2q4c1q5d1p6e1o7g1o8h1n9j1mak1lbm1lcn1mdm3mgn6lmo3lpn3msl2nuj2nwi1nxh2nzg1nAf1nBe2oDc1tE61",
+        terrain = "64x43:Ca21nb91Bb31mcb1Ac41ndi2nfj1ngk2oij5nnk1mol5ltl1muk1mv81zv61pw21",
+        proximity = "full",
+    },
+}
+
+local function DecodePlayerFovLiveMaskGeometry(encoded)
+    if encoded == "full" then return { full = true, columns = 1, rows = 1 } end
+    if encoded == "empty" then return { empty = true, columns = 1, rows = 1 } end
+    if type(encoded) ~= "string" then return nil end
+
+    local columns, rows, rectangleData = encoded:match("^(%d+)x(%d+):(.+)$")
+    columns, rows = tonumber(columns), tonumber(rows)
+    if not columns or not rows or not rectangleData
+        or columns < 1 or columns > PLAYER_FOV_LIVE_MASK_MAX_GRID_SIZE
+        or rows < 1 or rows > PLAYER_FOV_LIVE_MASK_MAX_GRID_SIZE
+        or #rectangleData % 4 ~= 0 then
+        return nil
+    end
+
+    local rectangles = {}
+    for offset = 1, #rectangleData, 4 do
+        local values = {}
+        for component = 0, 3 do
+            local token = rectangleData:sub(offset + component, offset + component)
+            local index = PLAYER_FOV_LIVE_MASK_ALPHABET:find(token, 1, true)
+            if not index then return nil end
+            values[component + 1] = index - 1
+        end
+
+        local x, y, width, height = values[1], values[2], values[3], values[4]
+        if width <= 0 or height <= 0
+            or x + width > columns
+            or y + height > rows then
+            return nil
+        end
+        rectangles[#rectangles + 1] = { x = x, y = y, width = width, height = height }
+    end
+    if #rectangles > PLAYER_FOV_LIVE_MASK_MAX_RECTS then return nil end
+    return { columns = columns, rows = rows, rectangles = rectangles }
+end
+
+local PLAYER_FOV_LIVE_MASK_GEOMETRY_SETS = {}
+for setName, definitions in pairs(PLAYER_FOV_LIVE_MASK_GEOMETRY_SOURCE) do
+    local decoded = {}
+    for semanticKind, encoded in pairs(definitions) do
+        decoded[semanticKind] = DecodePlayerFovLiveMaskGeometry(encoded)
+    end
+    PLAYER_FOV_LIVE_MASK_GEOMETRY_SETS[setName] = decoded
+end
+
+local PLAYER_FOV_LIVE_MAP_MASK_GEOMETRY = {
+    [112] = PLAYER_FOV_LIVE_MASK_GEOMETRY_SETS.ArathiBasin,
+    [1366] = PLAYER_FOV_LIVE_MASK_GEOMETRY_SETS.ArathiBasin,
+    [275] = PLAYER_FOV_LIVE_MASK_GEOMETRY_SETS.BattleForGilneas,
+    [761] = PLAYER_FOV_LIVE_MASK_GEOMETRY_SETS.BattleForGilneas,
+    [1576] = PLAYER_FOV_LIVE_MASK_GEOMETRY_SETS.DeepwindGorge,
+    [2345] = PLAYER_FOV_LIVE_MASK_GEOMETRY_SETS.DeephaulRavine,
+    [210] = PLAYER_FOV_LIVE_MASK_GEOMETRY_SETS.EyeOfTheStorm,
+    [907] = PLAYER_FOV_LIVE_MASK_GEOMETRY_SETS.SeethingShore,
+    [1803] = PLAYER_FOV_LIVE_MASK_GEOMETRY_SETS.SeethingShore,
+    [423] = PLAYER_FOV_LIVE_MASK_GEOMETRY_SETS.SilvershardMines,
+    [727] = PLAYER_FOV_LIVE_MASK_GEOMETRY_SETS.SilvershardMines,
+    [417] = PLAYER_FOV_LIVE_MASK_GEOMETRY_SETS.TempleOfKotmogu,
+    [998] = PLAYER_FOV_LIVE_MASK_GEOMETRY_SETS.TempleOfKotmogu,
+    [726] = PLAYER_FOV_LIVE_MASK_GEOMETRY_SETS.TwinPeaks,
+    [206] = PLAYER_FOV_LIVE_MASK_GEOMETRY_SETS.WarsongGulch,
+    [1339] = PLAYER_FOV_LIVE_MASK_GEOMETRY_SETS.WarsongGulch,
+}
 
 local PLAYER_FOV_SUBLEVEL = 1
 local PLAYER_PIN_SUBLEVEL = 5
@@ -290,6 +507,541 @@ function Pins:PrintTeamStackDebug()
         self.nativeGroupPinsVisible == false and "hidden" or "shown",
         mode == "native-restricted" and ", stacking=suspended-for-accuracy" or ""
     ))
+end
+
+local function IsFovDiagnosticSecret(value)
+    if type(issecretvalue) ~= "function" then return false end
+    local ok, secret = pcall(issecretvalue, value)
+    return ok and secret == true
+end
+
+local function DescribeFovDiagnosticValue(value)
+    if IsFovDiagnosticSecret(value) then return "secret" end
+    if value == nil then return "nil" end
+    local valueType = type(value)
+    if valueType == "number" then return string.format("%.4f", value) end
+    if valueType == "boolean" or valueType == "string" then return tostring(value) end
+    return valueType
+end
+
+local function GetFovDiagnosticMapPosition(unitMapID)
+    if not unitMapID or not C_Map or type(C_Map.GetPlayerMapPosition) ~= "function" then
+        return "unavailable"
+    end
+
+    local ok, position = pcall(C_Map.GetPlayerMapPosition, unitMapID, "player")
+    if not ok then return "error" end
+    if IsFovDiagnosticSecret(position) then return "secret" end
+    if position == nil then return "nil" end
+    if type(position.GetXY) ~= "function" then return type(position) .. ":no-GetXY" end
+
+    local xyOK, x, y = pcall(position.GetXY, position)
+    if not xyOK then return "GetXY-error" end
+    return DescribeFovDiagnosticValue(x) .. "," .. DescribeFovDiagnosticValue(y)
+end
+
+local function GetFovDiagnosticUnitPosition()
+    if type(UnitPosition) ~= "function" then return "unavailable" end
+    local ok, x, y, z, instanceID = pcall(UnitPosition, "player")
+    if not ok then return "error" end
+    return table.concat({
+        DescribeFovDiagnosticValue(x),
+        DescribeFovDiagnosticValue(y),
+        DescribeFovDiagnosticValue(z),
+        DescribeFovDiagnosticValue(instanceID),
+    }, ",")
+end
+
+local function GetFovDiagnosticRegionStats(frame)
+    local stats = {
+        containers = 0,
+        children = 0,
+        regions = 0,
+        textures = 0,
+        maskableTextures = 0,
+    }
+
+    local function Scan(container, depth)
+        if not container or depth > 4 then return end
+        stats.containers = stats.containers + 1
+
+        if type(container.GetRegions) == "function" then
+            local packed = { pcall(container.GetRegions, container) }
+            if packed[1] then
+                for index = 2, #packed do
+                    local region = packed[index]
+                    if region then
+                        stats.regions = stats.regions + 1
+                        if type(region.GetTexture) == "function" then
+                            stats.textures = stats.textures + 1
+                            if type(region.AddMaskTexture) == "function" then
+                                stats.maskableTextures = stats.maskableTextures + 1
+                            end
+                        end
+                    end
+                end
+            end
+        end
+
+        if type(container.GetChildren) == "function" then
+            local packed = { pcall(container.GetChildren, container) }
+            if packed[1] then
+                for index = 2, #packed do
+                    local child = packed[index]
+                    if child then
+                        stats.children = stats.children + 1
+                        Scan(child, depth + 1)
+                    end
+                end
+            end
+        end
+    end
+
+    Scan(frame, 0)
+
+    local anchoring = "unavailable"
+    if frame and type(frame.IsAnchoringRestricted) == "function" then
+        local ok, restricted = pcall(frame.IsAnchoringRestricted, frame)
+        anchoring = ok and DescribeFovDiagnosticValue(restricted) or "error"
+    end
+    stats.anchoring = anchoring
+    if frame and type(frame.GetSize) == "function" then
+        local ok, width, height = pcall(frame.GetSize, frame)
+        stats.size = ok and (DescribeFovDiagnosticValue(width) .. "x" .. DescribeFovDiagnosticValue(height)) or "error"
+    else
+        stats.size = "unavailable"
+    end
+    if frame and type(frame.GetScale) == "function" then
+        local ok, scale = pcall(frame.GetScale, frame)
+        stats.scale = ok and DescribeFovDiagnosticValue(scale) or "error"
+    else
+        stats.scale = "unavailable"
+    end
+    return stats
+end
+
+function Pins:PrintFovDiagnostics()
+    local mapFrame = BattleMaps.MapFrame
+    local configMapID = tonumber(mapFrame and mapFrame.currentMapID)
+        or tonumber(self.unitConfigMapID)
+    local unitMapID = tonumber(self.unitMapID)
+    if not unitMapID and configMapID and BattleMaps.GetBattlegroundUIMapID then
+        local ok, resolved = pcall(BattleMaps.GetBattlegroundUIMapID, configMapID, true)
+        unitMapID = ok and tonumber(resolved) or nil
+    end
+
+    local pinConfig = configMapID and BattleMaps.Database:GetUnitsConfig(configMapID) or nil
+    local style = self:GetPlayerFovStyle(pinConfig)
+    local configuredScale = tonumber(pinConfig and pinConfig.playerFovScale) or 1
+    local mapScale = self:GetPlayerFovMapScale()
+    local size = pinConfig and self:GetPlayerFovSize(pinConfig, mapScale) or 0
+    BattleMaps.Chat(string.format(
+        "FoV diag: live=%s, configMap=%s, unitMap=%s, style=%s, size=%.2f.",
+        BattleMaps.IsInLiveBattleground() and "yes" or "no",
+        tostring(configMapID or "nil"),
+        tostring(unitMapID or "nil"),
+        tostring(style),
+        tonumber(size) or 0
+    ))
+
+    local canvas = mapFrame and mapFrame.canvas
+    local canvasWidth, canvasHeight = 0, 0
+    if canvas and type(canvas.GetSize) == "function" then
+        canvasWidth, canvasHeight = canvas:GetSize()
+    end
+    BattleMaps.Chat(string.format(
+        "FoV sizing: setting=%.2fx, mapScale=%.4f, canvas=%.2fx%.2f.",
+        configuredScale,
+        tonumber(mapScale) or 0,
+        tonumber(canvasWidth) or 0,
+        tonumber(canvasHeight) or 0
+    ))
+
+    BattleMaps.Chat(string.format(
+        "FoV coords: C_Map=%s; UnitPosition=%s.",
+        GetFovDiagnosticMapPosition(unitMapID),
+        GetFovDiagnosticUnitPosition()
+    ))
+
+    local maskStates = {}
+    for _, layer in ipairs(PLAYER_FOV_LAYER_ORDER) do
+        local appearance = self:GetPlayerFovLayerAppearance(pinConfig, layer)
+        if appearance then
+            local texture = appearance.maskKind and self:GetPlayerFovMask(appearance.maskKind) or nil
+            maskStates[#maskStates + 1] = string.format(
+                "%s:%s=%s",
+                layer,
+                tostring(appearance.maskKind or "none"),
+                texture and "asset" or "off/missing"
+            )
+        end
+    end
+    BattleMaps.Chat("FoV masks: " .. (#maskStates > 0 and table.concat(maskStates, ", ") or "no active layers") .. ".")
+
+    local liveMaskStates = {}
+    for _, layer in ipairs(PLAYER_FOV_LAYER_ORDER) do
+        local appearance = self:GetPlayerFovLayerAppearance(pinConfig, layer)
+        if appearance then
+            local geometry = appearance.maskKind and self:GetPlayerFovLiveMaskGeometry(appearance.maskKind) or nil
+            local state = "native"
+            if geometry then
+                if geometry.full then
+                    state = "full/1 canvas clip"
+                elseif geometry.empty then
+                    state = "empty"
+                elseif geometry.rectangles then
+                    state = string.format(
+                        "%d clips @ %dx%d",
+                        #geometry.rectangles,
+                        tonumber(geometry.columns) or 0,
+                        tonumber(geometry.rows) or 0
+                    )
+                end
+            end
+            liveMaskStates[#liveMaskStates + 1] = layer .. "=" .. state
+        end
+    end
+    BattleMaps.Chat("FoV live mask geometry: "
+        .. (#liveMaskStates > 0 and table.concat(liveMaskStates, ", ") or "no active layers") .. ".")
+
+    for _, info in ipairs({
+        { name = "under", frame = self.playerFovFrame },
+        { name = "arc", frame = self.playerFovArcFrame },
+        { name = "beam", frame = self.playerFovBeamFrame },
+    }) do
+        if info.frame then
+            local stats = GetFovDiagnosticRegionStats(info.frame)
+            BattleMaps.Chat(string.format(
+                "FoV native %s: frame=%s@%s, children=%d, regions=%d, textures=%d, maskable=%d, anchoringRestricted=%s.",
+                info.name,
+                stats.size,
+                stats.scale,
+                stats.children,
+                stats.regions,
+                stats.textures,
+                stats.maskableTextures,
+                stats.anchoring
+            ))
+        end
+    end
+end
+
+local FOV_CLIP_DIAGNOSTIC_STRIPE_COUNT = 8
+
+local function UpdateClippedPlayerFovFrameFull(frame)
+    frame:ClearUnits()
+    local appearance = frame.BattleMapsFovAppearance
+    if appearance and frame.BattleMapsFovTexture then
+        frame:AddUnit(
+            "player",
+            frame.BattleMapsFovTexture,
+            frame.BattleMapsFovSize or 96,
+            (frame.BattleMapsFovSize or 96) * (tonumber(appearance.aspect) or 1),
+            1, 1, 1, frame.BattleMapsFovAlpha or 1,
+            PLAYER_FOV_SUBLEVEL,
+            true
+        )
+    end
+    frame:FinalizeUnits()
+    frame.needsFullUpdate = false
+end
+
+local function UpdateClippedPlayerFovFramePeriodic(frame)
+    frame:SetUnitColor("player", 1, 1, 1, frame.BattleMapsFovAlpha or 1)
+end
+
+local function CreateClippedPlayerFovUnitFrame(pins, host)
+    local unitFrame = CreateFrame("UnitPositionFrame", nil, host, "UnitPositionFrameTemplate")
+    unitFrame.BattleMapsPins = pins
+    unitFrame.UpdateFull = UpdateClippedPlayerFovFrameFull
+    unitFrame.UpdatePeriodic = UpdateClippedPlayerFovFramePeriodic
+    unitFrame:SetPinSubLevel("player", PLAYER_FOV_SUBLEVEL)
+    unitFrame:SetUseClassColor("player", false)
+    unitFrame:SetShouldShowUnits("player", false)
+    unitFrame:SetShouldShowUnits("party", false)
+    unitFrame:SetShouldShowUnits("raid", false)
+    -- The native widget continuously owns position/facing. Periodic Lua work is
+    -- unnecessary; settings and map changes explicitly request a full update.
+    unitFrame:SetNeedsPeriodicUpdate(false)
+    unitFrame:SetAlpha(1)
+    unitFrame:Show()
+    return unitFrame
+end
+
+function Pins:HideFovClipDiagnostic()
+    for _, host in ipairs(self.fovClipDiagnosticHosts or {}) do
+        host:Hide()
+    end
+end
+
+function Pins:AcquireFovClipDiagnosticHost(index)
+    self.fovClipDiagnosticHosts = self.fovClipDiagnosticHosts or {}
+    local host = self.fovClipDiagnosticHosts[index]
+    if host then return host end
+
+    local parent = self.parent
+    if not parent or type(parent.SetClipsChildren) ~= "function" then return nil end
+
+    host = CreateFrame("Frame", nil, parent)
+    host:SetClipsChildren(true)
+    host:EnableMouse(false)
+
+    host.unitFrame = CreateClippedPlayerFovUnitFrame(self, host)
+
+    host:Hide()
+    self.fovClipDiagnosticHosts[index] = host
+    return host
+end
+
+function Pins:RefreshFovClipDiagnostic()
+    if self.fovClipDiagnosticEnabled ~= true or not self:ShouldRenderLivePlayerPosition() then
+        self:HideFovClipDiagnostic()
+        return false
+    end
+
+    local mapFrame = BattleMaps.MapFrame
+    local canvas = mapFrame and mapFrame.canvas
+    local width, height
+    if canvas then width, height = canvas:GetSize() end
+    if not canvas or not width or width <= 1 or not height or height <= 1 then
+        self:HideFovClipDiagnostic()
+        return false
+    end
+
+    local configMapID = tonumber(mapFrame.currentMapID) or tonumber(self.unitConfigMapID)
+    local unitMapID = tonumber(self.unitMapID)
+    local pinConfig = configMapID and BattleMaps.Database:GetUnitsConfig(configMapID) or nil
+    local appearance = self:GetPlayerFovLayerAppearance(pinConfig, "under")
+        or self:GetPlayerFovLayerAppearance(pinConfig, "beam")
+        or self:GetPlayerFovLayerAppearance(pinConfig, "arc")
+    if not unitMapID or not appearance then
+        self:HideFovClipDiagnostic()
+        return false
+    end
+
+    local size = self:GetPlayerFovSize(pinConfig, self:GetPlayerFovMapScale())
+    local alpha = self:GetPlayerFovLayerAlpha(pinConfig, "under")
+    if not self:GetPlayerFovLayerAppearance(pinConfig, "under") then
+        alpha = self:GetPlayerFovAlpha(pinConfig)
+    end
+    local stripeWidth = width / FOV_CLIP_DIAGNOSTIC_STRIPE_COUNT
+    local hostCount = FOV_CLIP_DIAGNOSTIC_STRIPE_COUNT / 2
+
+    for index = 1, hostCount do
+        local host = self:AcquireFovClipDiagnosticHost(index)
+        if not host then
+            self:HideFovClipDiagnostic()
+            return false
+        end
+
+        local stripeIndex = (index - 1) * 2
+        host:ClearAllPoints()
+        host:SetPoint("TOPLEFT", canvas, "TOPLEFT", stripeIndex * stripeWidth, 0)
+        host:SetSize(stripeWidth, height)
+        host:SetFrameLevel(self.parent:GetFrameLevel() + PLAYER_FOV_BEAM_FRAME_LEVEL_OFFSET)
+
+        local unitFrame = host.unitFrame
+        unitFrame:ClearAllPoints()
+        unitFrame:SetPoint("TOPLEFT", canvas, "TOPLEFT", 0, 0)
+        unitFrame:SetSize(width, height)
+        unitFrame:SetFrameLevel(host:GetFrameLevel() + 1)
+        unitFrame.BattleMapsFovAppearance = appearance
+        unitFrame.BattleMapsFovTexture = appearance.texture
+        unitFrame.BattleMapsFovSize = size
+        unitFrame.BattleMapsFovAlpha = alpha
+        unitFrame:SetUiMapID(unitMapID)
+        unitFrame:UpdateAppearanceData()
+        unitFrame:SetNeedsFullUpdate()
+        unitFrame:UpdatePlayerPins()
+        host:Show()
+    end
+
+    return true
+end
+
+function Pins:SetFovClipDiagnosticEnabled(enabled)
+    enabled = enabled == true
+    if enabled and BattleMaps.IsInLiveBattleground() ~= true then
+        BattleMaps.Chat("FoV clip test requires a live battleground.")
+        return false
+    end
+
+    self.fovClipDiagnosticEnabled = enabled or nil
+    if not enabled then self:HideFovClipDiagnostic() end
+    self:RefreshGroup()
+    BattleMaps.Chat(enabled
+        and "FoV clip test enabled. The cone should appear in alternating vertical stripes; run /bmap fovcliptest off to restore normal rendering."
+        or "FoV clip test disabled; normal FoV rendering restored.")
+    return true
+end
+
+function Pins:HideLiveMaskedPlayerFovLayer(layer, firstUnused)
+    local fullHide = not firstUnused or firstUnused <= 1
+    if fullHide and not (self.liveMaskedPlayerFovActiveLayers
+        and self.liveMaskedPlayerFovActiveLayers[layer]) then
+        return
+    end
+
+    local hosts = self.liveMaskedPlayerFovHosts and self.liveMaskedPlayerFovHosts[layer]
+    if hosts then
+        for index = firstUnused or 1, #hosts do
+            hosts[index]:Hide()
+        end
+    end
+    if fullHide then
+        self.liveMaskedPlayerFovState = self.liveMaskedPlayerFovState or {}
+        self.liveMaskedPlayerFovState[layer] = nil
+        self.liveMaskedPlayerFovActiveLayers[layer] = nil
+    end
+end
+
+function Pins:HideLiveMaskedPlayerFov()
+    for layer in pairs(self.liveMaskedPlayerFovHosts or {}) do
+        self:HideLiveMaskedPlayerFovLayer(layer)
+    end
+end
+
+function Pins:AcquireLiveMaskedPlayerFovHost(layer, index)
+    self.liveMaskedPlayerFovHosts = self.liveMaskedPlayerFovHosts or {}
+    self.liveMaskedPlayerFovHosts[layer] = self.liveMaskedPlayerFovHosts[layer] or {}
+    local hosts = self.liveMaskedPlayerFovHosts[layer]
+    local host = hosts[index]
+    if host then return host end
+
+    local parent = self:GetPlayerFovLayerRenderParent(layer)
+    if not parent or type(parent.SetClipsChildren) ~= "function" then return nil end
+
+    host = CreateFrame("Frame", nil, parent)
+    host.BattleMapsFovLayer = layer
+    host:SetClipsChildren(true)
+    host:EnableMouse(false)
+    host.unitFrame = CreateClippedPlayerFovUnitFrame(self, host)
+    host:Hide()
+    hosts[index] = host
+    return host
+end
+
+function Pins:RenderLiveMaskedPlayerFovLayer(layer, pinConfig, appearance, size, unitMapID)
+    local geometry = appearance and appearance.maskKind
+        and self:GetPlayerFovLiveMaskGeometry(appearance.maskKind) or nil
+    if not geometry then
+        self:HideLiveMaskedPlayerFovLayer(layer)
+        return false
+    end
+    if geometry.empty then
+        self:HideLiveMaskedPlayerFovLayer(layer)
+        return true
+    end
+
+    -- A fully opaque map mask is still finite: outside the map-sized mask
+    -- region is transparent. Keep it on one canvas-sized clip rather than
+    -- incorrectly falling back to an unbounded native pass.
+    local columns = tonumber(geometry.columns) or 1
+    local rows = tonumber(geometry.rows) or 1
+    local rectangles = geometry.rectangles
+    if geometry.full then
+        rectangles = PLAYER_FOV_LIVE_MASK_FULL_RECTANGLES
+    end
+    if type(rectangles) ~= "table" or #rectangles == 0
+        or #rectangles > PLAYER_FOV_LIVE_MASK_MAX_RECTS then
+        self:HideLiveMaskedPlayerFovLayer(layer)
+        return false
+    end
+
+    local mapFrame = BattleMaps.MapFrame
+    local canvas = mapFrame and mapFrame.canvas
+    local canvasWidth, canvasHeight
+    if canvas then canvasWidth, canvasHeight = canvas:GetSize() end
+    if not canvas or not canvasWidth or canvasWidth <= 1
+        or not canvasHeight or canvasHeight <= 1 then
+        self:HideLiveMaskedPlayerFovLayer(layer)
+        return false
+    end
+
+    local cellWidth = canvasWidth / columns
+    local cellHeight = canvasHeight / rows
+    local frameLevel = self:GetPlayerFovLayerFrameLevel(layer)
+    local alpha = self:GetPlayerFovLayerAlpha(pinConfig, layer)
+    local renderKey = table.concat({
+        tostring(unitMapID),
+        tostring(geometry),
+        tostring(appearance.texture),
+        tostring(appearance.aspect or 1),
+        string.format("%.4f", tonumber(size) or 0),
+        string.format("%.4f", tonumber(alpha) or 0),
+        string.format("%.4f", canvasWidth),
+        string.format("%.4f", canvasHeight),
+        tostring(frameLevel),
+    }, "\031")
+    self.liveMaskedPlayerFovState = self.liveMaskedPlayerFovState or {}
+    if self.liveMaskedPlayerFovState[layer] == renderKey then return true end
+    self.liveMaskedPlayerFovActiveLayers = self.liveMaskedPlayerFovActiveLayers or {}
+    self.liveMaskedPlayerFovActiveLayers[layer] = true
+
+    for index, rectangle in ipairs(rectangles) do
+        local host = self:AcquireLiveMaskedPlayerFovHost(layer, index)
+        if not host then
+            self:HideLiveMaskedPlayerFovLayer(layer)
+            return false
+        end
+
+        host:ClearAllPoints()
+        host:SetPoint(
+            "TOPLEFT",
+            canvas,
+            "TOPLEFT",
+            rectangle.x * cellWidth,
+            -(rectangle.y * cellHeight)
+        )
+        host:SetSize(rectangle.width * cellWidth, rectangle.height * cellHeight)
+        host:SetFrameLevel(math.max(0, frameLevel - 1))
+
+        local unitFrame = host.unitFrame
+        unitFrame:ClearAllPoints()
+        unitFrame:SetPoint("TOPLEFT", canvas, "TOPLEFT", 0, 0)
+        unitFrame:SetSize(canvasWidth, canvasHeight)
+        unitFrame:SetFrameLevel(frameLevel)
+        unitFrame.BattleMapsFovAppearance = appearance
+        unitFrame.BattleMapsFovTexture = appearance.texture
+        unitFrame.BattleMapsFovSize = size
+        unitFrame.BattleMapsFovAlpha = alpha
+        if unitFrame.BattleMapsFovMapID ~= unitMapID then
+            unitFrame:SetUiMapID(unitMapID)
+            unitFrame:UpdateAppearanceData()
+            unitFrame.BattleMapsFovMapID = unitMapID
+        end
+        unitFrame:SetNeedsFullUpdate()
+        host:Show()
+        unitFrame:UpdatePlayerPins()
+    end
+
+    self:HideLiveMaskedPlayerFovLayer(layer, #rectangles + 1)
+    self.liveMaskedPlayerFovState[layer] = renderKey
+    return true
+end
+
+function Pins:RenderLiveMaskedPlayerFov(pinConfig, size, unitMapID)
+    local handledLayers = {}
+    if not self:ShouldRenderLivePlayerPosition() or self.fovClipDiagnosticEnabled == true then
+        self:HideLiveMaskedPlayerFov()
+        return handledLayers
+    end
+
+    for _, layer in ipairs(PLAYER_FOV_LAYER_ORDER) do
+        local appearance = self:GetPlayerFovLayerAppearance(pinConfig, layer)
+        if appearance then
+            handledLayers[layer] = self:RenderLiveMaskedPlayerFovLayer(
+                layer,
+                pinConfig,
+                appearance,
+                size,
+                unitMapID
+            )
+        else
+            self:HideLiveMaskedPlayerFovLayer(layer)
+        end
+    end
+    return handledLayers
 end
 
 local TEAM_STACK_DIRECTIONS = {
@@ -946,6 +1698,202 @@ function Pins:GetPlayerFovLayerAppearance(pinConfig, layer)
     return style and style[layer] or nil
 end
 
+function Pins:GetPlayerFovMask(maskKind)
+    local db = BattleMaps.Database and BattleMaps.Database:Get()
+    if not db then return nil end
+
+    -- Preserve the existing SavedVariables/toggles while exposing semantic
+    -- layer names in the renderer. boundary/beam/accent remain accepted as
+    -- compatibility aliases for older debug calls and builds.
+    local semanticKind = ({
+        boundary = "core",
+        beam = "terrain",
+        accent = "proximity",
+    })[maskKind] or maskKind
+
+    if semanticKind == "core" and db.fovBoundaryMask ~= true then return nil end
+    if semanticKind == "terrain" and db.fovBeamMask == false then return nil end
+    if semanticKind == "proximity" and db.fovAccentMask == false then return nil end
+
+    local mapID = tonumber(BattleMaps.MapFrame and BattleMaps.MapFrame.currentMapID)
+        or tonumber(self.unitConfigMapID)
+    local definitions = PLAYER_FOV_MAP_MASKS[mapID]
+    return definitions and definitions[semanticKind] or nil
+end
+
+function Pins:GetPlayerFovLiveMaskGeometry(maskKind)
+    local semanticKind = ({
+        boundary = "core",
+        beam = "terrain",
+        accent = "proximity",
+    })[maskKind] or maskKind
+
+    -- The existing setting/asset lookup remains authoritative. A disabled mask
+    -- deliberately falls back to the ordinary single native FoV pass.
+    if not self:GetPlayerFovMask(semanticKind) then return nil end
+
+    local mapID = tonumber(BattleMaps.MapFrame and BattleMaps.MapFrame.currentMapID)
+        or tonumber(self.unitConfigMapID)
+    local definitions = PLAYER_FOV_LIVE_MAP_MASK_GEOMETRY[mapID]
+    return definitions and definitions[semanticKind] or nil
+end
+
+function Pins:HasPlayerFovMask(pinConfig)
+    for _, layer in ipairs(PLAYER_FOV_LAYER_ORDER) do
+        local appearance = self:GetPlayerFovLayerAppearance(pinConfig, layer)
+        if appearance and appearance.maskKind and self:GetPlayerFovMask(appearance.maskKind) then
+            return true
+        end
+    end
+    return false
+end
+
+function Pins:HideMapBoundFov()
+    for _, frame in pairs(self.mapBoundFovFrames or {}) do
+        frame:Hide()
+    end
+    self.mapBoundFovActiveLayers = nil
+    self.mapBoundFovState = nil
+end
+
+function Pins:AcquireMapBoundFovLayer(layer)
+    self.mapBoundFovFrames = self.mapBoundFovFrames or {}
+    if self.mapBoundFovFrames[layer] then return self.mapBoundFovFrames[layer] end
+
+    local parent = self:GetPlayerFovLayerRenderParent(layer)
+    if not parent or type(parent.CreateTexture) ~= "function" then return nil end
+
+    local frame = CreateFrame("Frame", nil, parent)
+    frame.BattleMapsFovLayer = layer
+    frame:SetFrameLevel(self:GetPlayerFovLayerFrameLevel(layer))
+    frame:EnableMouse(false)
+
+    local texture = frame:CreateTexture(nil, "ARTWORK")
+    texture:SetAllPoints()
+    frame.texture = texture
+
+    -- MaskTexture is attached to an unrotated, canvas-sized region. The cone
+    -- rotates through its UV coordinates, so the boundary remains fixed to
+    -- the map instead of stretching or rotating with the cone.
+    if not frame.CreateMaskTexture or not texture.AddMaskTexture then
+        frame.maskUnsupported = true
+    else
+        local mask = frame:CreateMaskTexture()
+        if mask then
+            mask:SetAllPoints(frame)
+            frame.mask = mask
+            texture:AddMaskTexture(mask)
+        else
+            frame.maskUnsupported = true
+        end
+    end
+
+    frame:Hide()
+    self.mapBoundFovFrames[layer] = frame
+    return frame
+end
+
+local function GetMapBoundFovTexCoord(width, height, originX, originY, drawWidth, drawHeight, rotation)
+    local cosine = math.cos(rotation or 0)
+    local sine = math.sin(rotation or 0)
+
+    local function Transform(x, y)
+        local dx, dy = x - originX, y - originY
+        -- Transform map coordinates into the FoV source texture using WoW's
+        -- screen-coordinate rotation convention, while the physical region
+        -- remains aligned to the map canvas.
+        local sourceX = (cosine * dx) - (sine * dy)
+        local sourceY = (sine * dx) + (cosine * dy)
+        return 0.5 + (sourceX / drawWidth), 0.5 + (sourceY / drawHeight)
+    end
+
+    local ulX, ulY = Transform(0, 0)
+    local llX, llY = Transform(0, height)
+    local urX, urY = Transform(width, 0)
+    local lrX, lrY = Transform(width, height)
+    return ulX, ulY, llX, llY, urX, urY, lrX, lrY
+end
+
+function Pins:RenderMapBoundFov(pinConfig, x, y, size, isTest)
+    local mapFrame = BattleMaps.MapFrame
+    local canvas = mapFrame and mapFrame.canvas
+    if not canvas then
+        self:HideMapBoundFov()
+        return false
+    end
+
+    local canvasWidth, canvasHeight = canvas:GetSize()
+    if not canvasWidth or not canvasHeight or canvasWidth <= 1 or canvasHeight <= 1 then
+        self:HideMapBoundFov()
+        return false
+    end
+
+    x = BattleMaps.Clamp(tonumber(x) or 0.5, 0, 1)
+    y = BattleMaps.Clamp(tonumber(y) or 0.5, 0, 1)
+    size = math.max(1, tonumber(size) or 1)
+    local rotation = self:GetPlayerFacingRotation()
+    local originX, originY = x * canvasWidth, y * canvasHeight
+
+    local activeLayers = {}
+    for _, layer in ipairs(PLAYER_FOV_LAYER_ORDER) do
+        local appearance = self:GetPlayerFovLayerAppearance(pinConfig, layer)
+        local frame = self.mapBoundFovFrames and self.mapBoundFovFrames[layer]
+        local maskTexture = appearance and appearance.maskKind
+            and self:GetPlayerFovMask(appearance.maskKind) or nil
+        if appearance and maskTexture then
+            frame = self:AcquireMapBoundFovLayer(layer)
+            if not frame or frame.maskUnsupported or not frame.mask then
+                self:HideMapBoundFov()
+                return false
+            end
+
+            frame:SetFrameLevel(self:GetPlayerFovLayerFrameLevel(layer))
+            frame:ClearAllPoints()
+            frame:SetPoint("TOPLEFT", canvas, "TOPLEFT", 0, 0)
+            frame:SetSize(canvasWidth, canvasHeight)
+            frame.mask:SetTexture(maskTexture)
+            frame.texture:SetTexture(appearance.texture)
+            frame.texture:SetBlendMode(appearance.blendMode or "BLEND")
+            frame.texture:SetVertexColor(1, 1, 1, 1)
+            frame.texture:SetAlpha(self:GetPlayerFovLayerAlpha(pinConfig, layer))
+            frame.texture:SetTexCoord(GetMapBoundFovTexCoord(
+                canvasWidth,
+                canvasHeight,
+                originX,
+                originY,
+                size,
+                size * (appearance.aspect or 1),
+                rotation
+            ))
+            frame:Show()
+            activeLayers[layer] = true
+        elseif frame then
+            frame:Hide()
+        end
+    end
+
+    if not next(activeLayers) then
+        self:HideMapBoundFov()
+        return false
+    end
+
+    self.mapBoundFovActiveLayers = activeLayers
+    self.mapBoundFovState = {
+        pinConfig = pinConfig,
+        x = x,
+        y = y,
+        size = size,
+        isTest = isTest == true,
+    }
+    return true
+end
+
+function Pins:UpdateMapBoundFov()
+    local state = self.mapBoundFovState
+    if not state then return false end
+    return self:RenderMapBoundFov(state.pinConfig, state.x, state.y, state.size, state.isTest)
+end
+
 function Pins:GetPlayerFovMapScale()
     local mapFrame = BattleMaps.MapFrame
     local canvas = mapFrame and mapFrame.canvas
@@ -964,7 +1912,7 @@ function Pins:GetPlayerFovSize(pinConfig, mapScale)
     local scale = BattleMaps.Clamp(
         tonumber(pinConfig and pinConfig.playerFovScale) or 1.00,
         0.25,
-        3.00
+        5.00
     )
     return BattleMaps.Clamp(PLAYER_FOV_BASE_SIZE * scale * (mapScale or 1), 24, 4096)
 end
@@ -981,9 +1929,9 @@ function Pins:GetPlayerFovLayerAlpha(pinConfig, layer)
     local appearance = self:GetPlayerFovLayerAppearance(pinConfig, layer)
     if not appearance then return 0 end
 
-    local multiplier = 1
+    local multiplier = BattleMaps.Clamp(tonumber(appearance.alphaMultiplier) or 1, 0, 1)
     if appearance.alphaSetting then
-        multiplier = BattleMaps.Clamp(
+        multiplier = multiplier * BattleMaps.Clamp(
             tonumber(pinConfig and pinConfig[appearance.alphaSetting]) or 1,
             0,
             1
@@ -992,7 +1940,32 @@ function Pins:GetPlayerFovLayerAlpha(pinConfig, layer)
     return BattleMaps.Clamp(self:GetPlayerFovAlpha(pinConfig) * multiplier, 0, 1)
 end
 
-local function ConfigurePlayerFovTextureRegion(region, appearance)
+local function NormalizeFovTextureKey(value)
+    if type(value) ~= "string" then return nil end
+    return value:lower():gsub("\\", "/")
+end
+
+local function PlayerAnchorTextureMatches(region, appearance)
+    if not region or not appearance then return false end
+    local expected = NormalizeFovTextureKey(appearance.texture)
+    if not expected then return false end
+
+    if type(region.GetTexture) == "function" then
+        local ok, value = pcall(region.GetTexture, region)
+        if ok and NormalizeFovTextureKey(value) == expected then
+            return true
+        end
+    end
+    if type(region.GetAtlas) == "function" then
+        local ok, atlas = pcall(region.GetAtlas, region)
+        if ok and NormalizeFovTextureKey(atlas) == expected then
+            return true
+        end
+    end
+    return false
+end
+
+function Pins:ConfigurePlayerFovTextureRegion(region, appearance)
     if not region or not appearance or type(region.GetTexture) ~= "function" then return end
     local texture = region:GetTexture()
     if type(texture) ~= "string" then return end
@@ -1007,24 +1980,196 @@ function Pins:ConfigurePlayerFovFrameTextures(frame, appearance)
     if not frame or not appearance then return end
     if type(frame.GetRegions) == "function" then
         for _, region in ipairs({ frame:GetRegions() }) do
-            ConfigurePlayerFovTextureRegion(region, appearance)
+            self:ConfigurePlayerFovTextureRegion(region, appearance)
         end
     end
     if type(frame.GetChildren) == "function" then
         for _, child in ipairs({ frame:GetChildren() }) do
             if type(child.GetRegions) == "function" then
                 for _, region in ipairs({ child:GetRegions() }) do
-                    ConfigurePlayerFovTextureRegion(region, appearance)
+                    self:ConfigurePlayerFovTextureRegion(region, appearance)
                 end
             end
         end
     end
 end
 
+function Pins:GetLivePlayerAnchorRegion()
+    local frame = self.playerFrame
+    local appearance = self.unitPlayerAppearance
+    if not frame or not appearance then return nil end
+
+    local exactMatch
+    local fallback
+    local function ScanRegion(region)
+        if exactMatch or not region or type(region.GetTexture) ~= "function" then return end
+        if type(region.IsShown) == "function" then
+            local shownOK, shown = pcall(region.IsShown, region)
+            if shownOK and not shown then return end
+        end
+        if PlayerAnchorTextureMatches(region, appearance) then
+            exactMatch = region
+            return
+        end
+
+        -- UnitPositionFrameTemplate has no authored decorative regions; with
+        -- only the player unit enabled, the first visible textured native
+        -- region is a safe fallback for atlas/file-ID representation differences.
+        local ok, value = pcall(region.GetTexture, region)
+        if ok and value ~= nil and fallback == nil then
+            fallback = region
+        end
+    end
+
+    local function ScanContainer(container, depth)
+        if exactMatch or not container or depth > 3 then return end
+        if type(container.GetRegions) == "function" then
+            for _, region in ipairs({ container:GetRegions() }) do
+                ScanRegion(region)
+                if exactMatch then return end
+            end
+        end
+        if type(container.GetChildren) == "function" then
+            for _, child in ipairs({ container:GetChildren() }) do
+                ScanContainer(child, depth + 1)
+                if exactMatch then return end
+            end
+        end
+    end
+
+    ScanContainer(frame, 0)
+    return exactMatch or fallback
+end
+
+function Pins:AcquireLivePlayerFovLayer(layer)
+    self.livePlayerFovFrames = self.livePlayerFovFrames or {}
+    if self.livePlayerFovFrames[layer] then return self.livePlayerFovFrames[layer] end
+
+    local parent = self:GetPlayerFovLayerRenderParent(layer)
+    if not parent then return nil end
+
+    local frame = CreateFrame("Frame", nil, parent)
+    frame.BattleMapsFovLayer = layer
+    frame:SetFrameLevel(self:GetPlayerFovLayerFrameLevel(layer))
+    frame:SetSize(1, 1)
+    frame:EnableMouse(false)
+
+    local texture = frame:CreateTexture(nil, "ARTWORK")
+    texture:SetAllPoints(frame)
+    texture:SetTexCoord(0, 1, 0, 1)
+    frame.texture = texture
+
+    frame:Hide()
+    self.livePlayerFovFrames[layer] = frame
+    return frame
+end
+
+function Pins:ConfigureLivePlayerFovMask(frame, appearance)
+    if not frame or not frame.texture then return end
+
+    local texture = frame.texture
+    local mapFrame = BattleMaps.MapFrame
+    local canvas = mapFrame and mapFrame.canvas
+    local maskTexture = appearance and appearance.maskKind
+        and self:GetPlayerFovMask(appearance.maskKind) or nil
+
+    local function DetachMask()
+        if frame.BattleMapsMaskAttached and frame.mask and texture.RemoveMaskTexture then
+            pcall(texture.RemoveMaskTexture, texture, frame.mask)
+        end
+        frame.BattleMapsMaskAttached = nil
+        frame.BattleMapsMaskTexture = nil
+    end
+
+    if not maskTexture or not canvas or not frame.CreateMaskTexture or not texture.AddMaskTexture then
+        DetachMask()
+        return
+    end
+
+    local mask = frame.mask
+    if not mask then
+        mask = frame:CreateMaskTexture(nil, "ARTWORK")
+        if not mask then
+            DetachMask()
+            return
+        end
+        frame.mask = mask
+    end
+
+    -- The cone frame follows the native player pin, but this mask is anchored
+    -- to the whole map canvas. It therefore remains geographically fixed while
+    -- the cone moves and rotates underneath it.
+    mask:ClearAllPoints()
+    mask:SetPoint("TOPLEFT", canvas, "TOPLEFT", 0, 0)
+    mask:SetPoint("BOTTOMRIGHT", canvas, "BOTTOMRIGHT", 0, 0)
+    mask:SetTexture(maskTexture)
+    frame.BattleMapsMaskTexture = maskTexture
+
+    if not frame.BattleMapsMaskAttached then
+        local ok = pcall(texture.AddMaskTexture, texture, mask)
+        frame.BattleMapsMaskAttached = ok == true or nil
+    end
+end
+
+function Pins:HideLivePlayerFov()
+    for _, frame in pairs(self.livePlayerFovFrames or {}) do
+        frame:Hide()
+    end
+    self.livePlayerFovAnchor = nil
+end
+
+function Pins:RenderLivePlayerFov(pinConfig, size)
+    if not self:ShouldRenderLivePlayerPosition() then
+        self:HideLivePlayerFov()
+        return false
+    end
+
+    local anchor = self:GetLivePlayerAnchorRegion()
+    if not anchor then
+        self:HideLivePlayerFov()
+        return false
+    end
+
+    size = math.max(1, tonumber(size) or self:GetPlayerFovSize(pinConfig, self:GetPlayerFovMapScale()))
+    local rotation = self:GetPlayerFacingRotation()
+    local active = false
+
+    for _, layer in ipairs(PLAYER_FOV_LAYER_ORDER) do
+        local appearance = self:GetPlayerFovLayerAppearance(pinConfig, layer)
+        local frame = self.livePlayerFovFrames and self.livePlayerFovFrames[layer]
+        if appearance then
+            frame = self:AcquireLivePlayerFovLayer(layer)
+            if frame then
+                frame:SetFrameLevel(self:GetPlayerFovLayerFrameLevel(layer))
+                frame:SetSize(size, size * (tonumber(appearance.aspect) or 1))
+                frame:ClearAllPoints()
+                frame:SetPoint("CENTER", anchor, "CENTER", 0, 0)
+
+                frame.texture:SetTexture(appearance.texture)
+                frame.texture:SetTexCoord(0, 1, 0, 1)
+                frame.texture:SetBlendMode(appearance.blendMode or "BLEND")
+                frame.texture:SetVertexColor(1, 1, 1, 1)
+                frame.texture:SetAlpha(self:GetPlayerFovLayerAlpha(pinConfig, layer))
+                if frame.texture.SetRotation then
+                    frame.texture:SetRotation(rotation)
+                end
+                self:ConfigureLivePlayerFovMask(frame, appearance)
+                frame:Show()
+                active = true
+            end
+        elseif frame then
+            frame:Hide()
+        end
+    end
+
+    self.livePlayerFovAnchor = active and anchor or nil
+    if not active then self:HideLivePlayerFov() end
+    return active
+end
+
 function Pins:ShouldRenderLivePlayerPosition()
-    -- BattleMaps only presents the real character position while the player is
-    -- actually inside a battleground. Preview and Test Mode provide their own
-    -- fixed-position player marker instead.
+    -- A live battleground is authoritative. Test Mode is a preview-only path
+    -- and must never replace the real player position while inside a match.
     return BattleMaps.IsInLiveBattleground() == true
 end
 
@@ -1036,13 +2181,43 @@ end
 
 function Pins:UpdateSmoothTestPlayerFacing()
     local mapFrame = BattleMaps.MapFrame
-    if not self.teamStackTestPreviewActive
-        or not mapFrame or mapFrame.testMode ~= true
-        or (BattleMaps.IsInLiveBattleground and BattleMaps.IsInLiveBattleground()) then
+    local updateTestPreview = self.teamStackTestPreviewActive
+        and mapFrame and mapFrame.testMode == true
+    local liveFovFrames = self.livePlayerFovFrames
+    local hasVisibleLiveFov = false
+
+    -- Older BattleMaps-owned player-anchored frames remain for compatibility.
+    -- Avoid polling facing when neither those frames nor Test Mode needs a
+    -- rotation update.
+    for _, fovFrame in pairs(liveFovFrames or {}) do
+        if fovFrame:IsShown() and fovFrame.texture and fovFrame.texture.SetRotation then
+            hasVisibleLiveFov = true
+            break
+        end
+    end
+    if not updateTestPreview and not hasVisibleLiveFov then return end
+
+    local rotation = self:GetPlayerFacingRotation()
+
+    -- Live FoV artwork is BattleMaps-owned and anchored to Blizzard's native
+    -- player pin. The anchor supplies the restricted battleground position;
+    -- BattleMaps owns rotation so the artwork can retain its authored aspect
+    -- ratio and scale without UnitPositionFrame resizing it.
+    for _, fovFrame in pairs(liveFovFrames or {}) do
+        if fovFrame:IsShown() and fovFrame.texture and fovFrame.texture.SetRotation then
+            fovFrame.texture:SetRotation(rotation)
+        end
+    end
+
+    local mapBoundState = self.mapBoundFovState
+    if mapBoundState and mapBoundState.isTest then
+        self:UpdateMapBoundFov()
+    end
+
+    if not updateTestPreview then
         return
     end
 
-    local rotation = self:GetPlayerFacingRotation()
     for _, fovFrame in pairs(self.testFovFrames or {}) do
         if fovFrame:IsShown() and fovFrame.texture and fovFrame.texture.SetRotation then
             fovFrame.texture:SetRotation(rotation)
@@ -1066,8 +2241,10 @@ function Pins:UpdatePlayerFovFramePeriodic(frame)
         frame:SetUnitColor("player", 1, 1, 1, 0)
         return
     end
-    -- The FoV retains its authored artwork and never follows the
-    -- selectable player-pin colour mode.
+
+    -- Live battleground position/facing must remain on UnitPositionFrame.
+    -- Blizzard can render that restricted position even though addon Lua
+    -- cannot read it back for anchoring an ordinary frame.
     local mapID = self.unitConfigMapID or (BattleMaps.MapFrame and BattleMaps.MapFrame.currentMapID)
     local pinConfig = BattleMaps.Database:GetUnitsConfig(mapID)
     local layer = frame.BattleMapsFovLayer or "under"
@@ -1083,20 +2260,21 @@ function Pins:UpdatePlayerFovFrameFull(frame)
         frame.needsFullUpdate = false
         return
     end
+
     local mapID = self.unitConfigMapID or (BattleMaps.MapFrame and BattleMaps.MapFrame.currentMapID)
     local pinConfig = BattleMaps.Database:GetUnitsConfig(mapID)
     local layer = frame.BattleMapsFovLayer or "under"
     local appearance = self:GetPlayerFovLayerAppearance(pinConfig, layer)
     if appearance then
-        local r, g, b = 1, 1, 1
-        local alpha = self:GetPlayerFovLayerAlpha(pinConfig, layer)
         local size = self.unitFovSize or self:GetPlayerFovSize(pinConfig, self:GetPlayerFovMapScale())
+        local nativeWidth = size
+        local nativeHeight = size * (tonumber(appearance.aspect) or 1)
         frame:AddUnit(
             "player",
             appearance.texture,
-            size,
-            size * (appearance.aspect or 1),
-            r, g, b, alpha,
+            nativeWidth,
+            nativeHeight,
+            1, 1, 1, self:GetPlayerFovLayerAlpha(pinConfig, layer),
             PLAYER_FOV_SUBLEVEL,
             true
         )
@@ -2176,7 +3354,6 @@ end
 function Pins:IsTeamStackTestPreviewActive()
     local mapFrame = BattleMaps.MapFrame
     if not mapFrame or mapFrame.testMode ~= true then return false end
-    if BattleMaps.IsInLiveBattleground and BattleMaps.IsInLiveBattleground() then return false end
     local mapID = tonumber(mapFrame.currentMapID) or tonumber(mapFrame.selectedMapID)
     if not mapID then return false end
 
@@ -2431,6 +3608,8 @@ function Pins:AcquireTestFovLayer(layer)
 end
 
 function Pins:RenderTestFov(pinConfig, x, y, size, canvasWidth, canvasHeight)
+    local useMapBoundFov = self:RenderMapBoundFov(pinConfig, x, y, size, true)
+
     local mapFrame = BattleMaps.MapFrame
     local canvas = mapFrame and mapFrame.canvas
     if not canvas then
@@ -2441,14 +3620,16 @@ function Pins:RenderTestFov(pinConfig, x, y, size, canvasWidth, canvasHeight)
     for _, layer in ipairs(PLAYER_FOV_LAYER_ORDER) do
         local appearance = self:GetPlayerFovLayerAppearance(pinConfig, layer)
         local existingFrame = self.testFovFrames and self.testFovFrames[layer]
-        if appearance then
+        if useMapBoundFov and self.mapBoundFovActiveLayers and self.mapBoundFovActiveLayers[layer] then
+            if existingFrame then existingFrame:Hide() end
+        elseif appearance then
             local frame = self:AcquireTestFovLayer(layer)
             frame:SetSize(size, size * (appearance.aspect or 1))
             frame:SetFrameLevel(self:GetPlayerFovLayerFrameLevel(layer))
             frame:ClearAllPoints()
             frame:SetPoint("CENTER", canvas, "TOPLEFT", x * canvasWidth, -(y * canvasHeight))
             frame.texture:SetTexture(appearance.texture)
-            frame.texture:SetBlendMode(appearance.blendMode or "BLEND")
+            self:ConfigurePlayerFovTextureRegion(frame.texture, appearance)
             frame.texture:SetVertexColor(1, 1, 1, 1)
             frame.texture:SetAlpha(self:GetPlayerFovLayerAlpha(pinConfig, layer))
             if frame.texture.SetRotation then
@@ -2463,6 +3644,9 @@ end
 
 function Pins:HideTestFov()
     for _, frame in pairs(self.testFovFrames or {}) do frame:Hide() end
+    if self.mapBoundFovState and self.mapBoundFovState.isTest then
+        self:HideMapBoundFov()
+    end
 end
 
 function Pins:HideTeamStackUnitFrames()
@@ -2493,6 +3677,8 @@ function Pins:SetLivePlayerUnitFramesEnabled(enabled)
     if self.livePlayerUnitFramesEnabled == enabled then return false end
     self.livePlayerUnitFramesEnabled = enabled
 
+    -- Keep every live player-position pass on Blizzard's UnitPositionFrame.
+    -- This widget is the supported route for restricted battleground position.
     for _, frame in ipairs({
         self.playerTeamBorderFrame,
         self.playerFovFrame,
@@ -2530,6 +3716,7 @@ function Pins:SuppressLiveUnitFramesForPreview()
     end
 
     self:HideTeamStackUnitFrames()
+    self:HideLivePlayerFov()
     if self.unitFrame then self:SetNativeGroupPinsVisible(self.unitFrame, true) end
     self:SetLivePlayerUnitFramesEnabled(false)
     for _, frame in ipairs({
@@ -3743,6 +4930,17 @@ function Pins:LayoutUnitFrame()
             end
             frame:SetFrameLevel(info.fovLayer and self:GetPlayerFovLayerFrameLevel(info.fovLayer)
                 or (self.parent:GetFrameLevel() + info.level))
+
+            if info.fovLayer then
+                -- UnitPositionFrame owns the restricted live player position.
+                -- Scaling its coordinate space makes that position and the
+                -- canvas-anchored MaskTexture disagree, which distorts the
+                -- cone and prevents a geographic clip. Keep both in native
+                -- canvas coordinates.
+                frame.BattleMapsFovNativeScale = nil
+                frame:SetScale(1)
+                frame:SetSize(width, height)
+            end
         end
     end
 
@@ -3750,7 +4948,7 @@ function Pins:LayoutUnitFrame()
         self.unitFrameWidth = width
         self.unitFrameHeight = height
         for _, info in ipairs(frames) do
-            if info.frame then info.frame:SetSize(width, height) end
+            if info.frame and not info.fovLayer then info.frame:SetSize(width, height) end
         end
     end
 
@@ -3761,6 +4959,8 @@ end
 
 function Pins:RefreshUnits(forceFullUpdate)
     if self:ShouldShowDummyPins() then
+        self:HideFovClipDiagnostic()
+        self:HideLiveMaskedPlayerFov()
         self:SuppressLiveUnitFramesForPreview()
         self:RefreshDummyPins()
         -- Re-render on every settings refresh so Test Mode immediately shows
@@ -3789,6 +4989,10 @@ function Pins:RefreshUnits(forceFullUpdate)
     if not unitFrame or not mapID or not unitMapID then
         self:HideTeamStackOverlay()
         self:HideTeamStackUnitFrames()
+        self:HideLivePlayerFov()
+        self:HideMapBoundFov()
+        self:HideFovClipDiagnostic()
+        self:HideLiveMaskedPlayerFov()
         if unitFrame then self:SetNativeGroupPinsVisible(unitFrame, true) end
         for _, frame in ipairs({
             self.teamBorderFrame,
@@ -3826,7 +5030,6 @@ function Pins:RefreshUnits(forceFullUpdate)
 
     self:LayoutUnitFrame()
 
-    local db = BattleMaps.Database:Get()
     local pinConfig = BattleMaps.Database:GetUnitsConfig(mapID)
     local renderLivePlayerPosition = self:ShouldRenderLivePlayerPosition()
     if self:SetLivePlayerUnitFramesEnabled(renderLivePlayerPosition) then
@@ -3919,11 +5122,16 @@ function Pins:RefreshUnits(forceFullUpdate)
     if self.unitFovSize ~= fovSize or self.unitFovStyle ~= fovStyle then
         self.unitFovSize = fovSize
         self.unitFovStyle = fovStyle
+        -- UnitPositionFrame owns live battleground positioning. Keep its
+        -- native pin dimensions synchronized with the FoV scale setting.
         for _, frame in ipairs({ self.playerFovFrame, self.playerFovArcFrame, self.playerFovBeamFrame }) do
             if frame then frame:SetPinSize("player", fovSize) end
         end
         forceFullUpdate = true
     end
+    -- Exact unit coordinates are unavailable in battleground instances, so
+    -- the map-bound masked renderer is reserved for Test Mode.
+    self:HideMapBoundFov()
     if self.unitTeamSize ~= teamSize or self.unitTeamBorderScale ~= teamBorderScale then
         self.unitTeamSize = teamSize
         self.unitTeamBorderScale = teamBorderScale
@@ -4038,8 +5246,13 @@ function Pins:RefreshUnits(forceFullUpdate)
         end
     end
 
-    -- FoV passes occupy dedicated under-map, above-map, and pin-layer levels.
-    -- The player marker remains above all three passes.
+    -- Enabled masks use clipped duplicates of the same native widget. A full
+    -- mask needs one canvas clip; partial masks use their compiled rectangles.
+    -- Disabled masks stay on the single established UnitPositionFrame pass.
+    local liveMaskedFovLayers = self:RenderLiveMaskedPlayerFov(pinConfig, fovSize, unitMapID)
+
+    -- Live FoV passes remain on UnitPositionFrame so Blizzard can supply the
+    -- restricted player position and facing inside battleground instances.
     for _, info in ipairs({
         { layer = "under", frame = self.playerFovFrame },
         { layer = "arc", frame = self.playerFovArcFrame },
@@ -4049,12 +5262,19 @@ function Pins:RefreshUnits(forceFullUpdate)
         if frame then
             local appearance = self:GetPlayerFovLayerAppearance(pinConfig, info.layer)
             local showFov = renderLivePlayerPosition and appearance ~= nil
+                and self.fovClipDiagnosticEnabled ~= true
+                and liveMaskedFovLayers[info.layer] ~= true
             frame:SetAlpha(showFov and 1 or 0)
             frame:UpdatePlayerPins()
             if showFov then
                 self:ConfigurePlayerFovFrameTextures(frame, appearance)
             end
         end
+    end
+    if self.fovClipDiagnosticEnabled == true then
+        self:RefreshFovClipDiagnostic()
+    else
+        self:HideFovClipDiagnostic()
     end
     if self.playerTeamBorderFrame then
         local showPlayerTeamBorder = renderLivePlayerPosition
@@ -4070,6 +5290,9 @@ function Pins:RefreshUnits(forceFullUpdate)
         self.playerFrame:UpdatePlayerPins()
         if renderLivePlayerPosition then self:NormalizeUnitFrameCustomTextures(self.playerFrame) end
     end
+    -- Any overlay-anchor frames created by 2.7.2-2.7.4 are retired. They
+    -- cannot follow a restricted UnitPositionFrame pin in live battlegrounds.
+    self:HideLivePlayerFov()
 
     if showNativeTeam then
         unitFrame:SetAlpha(1)
