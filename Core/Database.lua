@@ -4,37 +4,41 @@ local Database = {}
 BattleMaps.Database = Database
 
 local PIN_DEFAULTS = {
-    playerArrowSize = 33,
-    teamMemberPinSize = 13,
-    healerPinSize = 16,
+    playerArrowSize = 42,
+    teamMemberPinSize = 9,
+    healerPinSize = 20.5,
     combatTeamPinScale = 1.00, -- retired setting retained at 1 for SavedVariables compatibility
-    objectivePinScale = 2.10,
+    objectivePinScale = 1.40,
     objectivePinAlpha = 0.90,
-    carrierObjectivePinScale = 0.75,
-    vehicleObjectivePinScale = 0.70,
+    carrierObjectivePinScale = 1.10,
+    vehicleObjectivePinScale = 0.80,
 }
 
 local PLAYER_PIN_DEFAULTS = {
     playerArrowSize = PIN_DEFAULTS.playerArrowSize,
     playerPinStyle = "arrow",
-    playerFovStyle = "none",
-    playerFovScale = 1.00,
-    playerFovAlpha = 0.65,
-    playerFovBeamAlpha = 1.00,
+    playerFovStyle = "coldRays",
+    playerFovScale = 1.75,
+    playerFovAlpha = 1.00,
+    playerFovBeamAlpha = 0.25,
     teamMemberPinSize = PIN_DEFAULTS.teamMemberPinSize,
     healerPinSize = PIN_DEFAULTS.healerPinSize,
     teamPinBorderScale = 1.00,
     healerPinStyle = "icon",
     combatTeamPinScale = PIN_DEFAULTS.combatTeamPinScale,
     stackTeamPins = true,
-    fanOutTeamPinsOnHover = true,
-    excludePlayerArrowFromStack = false,
-    teamPinStackRadius = 13, -- retained for SavedVariables compatibility; no longer user-configurable
-    teamPinStackOverlap = 25,
+    fanOutTeamPinsOnHover = false,
+    excludePlayerArrowFromStack = true,
+    teamPinStackRadius = 11, -- retained for SavedVariables compatibility; no longer user-configurable
+    teamPinStackOverlap = 0,
     teamPinStackDirection = "compact",
-    showTeamSpecIcons = true,
+    showTeamSpecIcons = false,
     healerIconColorMode = "class",
-    healerIconCustomColor = { r = 1.00, g = 1.00, b = 1.00 },
+    healerIconCustomColor = {
+        r = 0.4431372880935669,
+        g = 1.00,
+        b = 0.3607843220233917,
+    },
 }
 
 local OBJECTIVE_PIN_DEFAULTS = {
@@ -44,10 +48,10 @@ local OBJECTIVE_PIN_DEFAULTS = {
     vehicleObjectivePinScale = PIN_DEFAULTS.vehicleObjectivePinScale,
     showFlagCarrierTrail = true,
     carriedTrailStyle = "glow",
-    carriedTrailDuration = 4.75,
-    carriedTrailDotScale = 0.80,
-    carriedTrailDetail = 16,
-    factionColorEnemyKotmoguOrbs = true,
+    carriedTrailDuration = 30.00,
+    carriedTrailDotScale = 1.40,
+    carriedTrailDetail = 24,
+    carriedObjectiveColorMode = "original",
     flashCarriedObjectives = true,
     carriedObjectiveFlashPeriod = 1.00,
     carriedObjectiveFlashStrength = 0.75,
@@ -58,24 +62,24 @@ local TIMER_DEFAULTS = {
     showObjectiveCaptureTimers = true,
     pulseObjectiveDuringCaptureTimer = true,
     flashObjectiveBeforeCapture = true,
-    objectiveCaptureFlashThreshold = 10,
-    objectiveCaptureFlashBrightness = 0.25,
-    objectiveCapturePulseMinAlpha = 0.45,
-    objectiveCapturePulseMaxAlpha = 0.75,
+    objectiveCaptureFlashThreshold = 5,
+    objectiveCaptureFlashBrightness = 0.15,
+    objectiveCapturePulseMinAlpha = 0.60,
+    objectiveCapturePulseMaxAlpha = 0.80,
     objectiveCaptureAfterPulseAlpha = 0.36,
-    showObjectiveTimerText = false,
+    showObjectiveTimerText = true,
     showObjectiveBlitzUncapText = true,
     objectiveTimerTextThreshold = 59,
-    objectiveTimerTextSize = 16,
-    objectiveTimerTextAlpha = 0.65,
+    objectiveTimerTextSize = 12,
+    objectiveTimerTextAlpha = 1.00,
     objectiveTimerTextOffsetX = 0,
     objectiveTimerTextOffsetY = 0,
     objectiveTimerTextFont = "Expressway",
     objectiveTimerTextColorMode = "custom",
     objectiveTimerTextColor = {
         r = 1.00,
-        g = 0.988235354423523,
-        b = 0.333333343267441,
+        g = 1.00,
+        b = 0.2901960909366608,
     },
     objectiveCaptureFillDirection = "horizontal",
     objectiveCapturePulseCount = 3,
@@ -85,16 +89,17 @@ local NOTIFICATION_DEFAULTS = {
     useBlizzardOnWorldMap = true,
     colorByFaction = true,
     scale = 1.00,
-    width = 520,
-    justifyH = "CENTER",
-    anchorMode = "INDEPENDENT",
-    mapAnchorSide = "TOP",
-    point = "TOP",
-    relativePoint = "TOP",
-    x = 0,
-    y = -100,
-    mapX = 0,
-    mapY = 28,
+    width = 360,
+    justifyH = "RIGHT",
+    anchorMode = "MAP",
+    mapAnchorSide = "LEFT",
+    notificationAnchorPoint = "AUTO",
+    point = "RIGHT",
+    relativePoint = "RIGHT",
+    x = -1.185360550880432,
+    y = -300,
+    mapX = -22,
+    mapY = 68,
     attachmentVersion = 2,
 }
 
@@ -103,24 +108,23 @@ local ROOT_DEFAULTS = {
     autoShow = true,
     autoHide = true,
     enableWorldMapIntegration = true,
-    worldMapPinScale = 1.00,
+    worldMapPinScale = 1.30,
     applyZoom = true,
     applyFrameSize = true,
     showLoginMessage = true,
     debug = false,
     factionSwapAlert = true,
     factionColoredBorder = true, -- legacy alias; kept for older saved variables
-    frameBorderSize = 3,
+    frameBorderSize = 2,
     frameBorderStrength = 1.00,
     frameBorderStyle = "solid",
-    frameBackgroundColor = { r = 0.015, g = 0.015, b = 0.015, a = 0.12 },
+    frameBackgroundColor = { r = 0, g = 0, b = 0, a = 1.00 },
     fadeMapHeader = true,
-    mapTextureAlpha = 0.90,
+    mapTextureAlpha = 0.80,
     fovBoundaryPreview = false,
     fovBoundaryMask = true,
     fovBeamMask = true,
-    fovAccentMask = true,
-    fovMaskSettingsVersion = 2,
+    fovMaskSettingsVersion = 3,
     highlightFriendlyHealers = true,
     useCustomHealerIcon = true,
     useCustomTeamPinTextures = true,
@@ -130,7 +134,7 @@ local ROOT_DEFAULTS = {
     carriedTrailDuration = OBJECTIVE_PIN_DEFAULTS.carriedTrailDuration,
     carriedTrailDotScale = OBJECTIVE_PIN_DEFAULTS.carriedTrailDotScale,
     carriedTrailDetail = OBJECTIVE_PIN_DEFAULTS.carriedTrailDetail,
-    factionColorEnemyKotmoguOrbs = OBJECTIVE_PIN_DEFAULTS.factionColorEnemyKotmoguOrbs,
+    carriedObjectiveColorMode = OBJECTIVE_PIN_DEFAULTS.carriedObjectiveColorMode,
     flashCarriedObjectives = true,
     carriedObjectiveFlashPeriod = OBJECTIVE_PIN_DEFAULTS.carriedObjectiveFlashPeriod,
     carriedObjectiveFlashStrength = OBJECTIVE_PIN_DEFAULTS.carriedObjectiveFlashStrength,
@@ -143,7 +147,7 @@ local ROOT_DEFAULTS = {
     objectiveCapturePulseMinAlpha = TIMER_DEFAULTS.objectiveCapturePulseMinAlpha,
     objectiveCapturePulseMaxAlpha = TIMER_DEFAULTS.objectiveCapturePulseMaxAlpha,
     objectiveCaptureAfterPulseAlpha = TIMER_DEFAULTS.objectiveCaptureAfterPulseAlpha,
-    showObjectiveTimerText = false,
+    showObjectiveTimerText = true,
     showObjectiveBlitzUncapText = true,
     objectiveTimerTextThreshold = TIMER_DEFAULTS.objectiveTimerTextThreshold,
     objectiveTimerTextSize = TIMER_DEFAULTS.objectiveTimerTextSize,
@@ -164,13 +168,17 @@ local ROOT_DEFAULTS = {
     objectivePulseStrength = 1.00,
     showPingPulses = false, -- retired: received ping data is secret during PvP chat lockdown
     hideMinimapInNonEpicBattlegrounds = true,
-    elvuiBGLayoutEnabled = true,
-    elvuiBGLayoutMovePlayerAuras = true,
+    -- Canonical provider-agnostic player aura relocation setting. The older
+    -- movePlayerAurasToMinimapArea key is kept synchronized as a downgrade
+    -- compatibility alias only.
+    bgLayoutMovePlayerAuras = true,
+    movePlayerAurasToMinimapArea = true,
+    hideObjectiveTrackerInBattlegrounds = true,
     playerArrowColorMode = "class",
     playerArrowCustomColor = {
-        r = 1.00,
-        g = 0.996078491210938,
-        b = 0.968627512454987,
+        r = 0.7921569347381592,
+        g = 0.8627451658248901,
+        b = 0.7803922295570374,
     },
     useGlobalPinSettings = false, -- legacy alias; kept for older saved variables
     useGlobalPlayerPinSettings = false,
@@ -189,14 +197,18 @@ local ROOT_DEFAULTS = {
     healerPinStyle = PLAYER_PIN_DEFAULTS.healerPinStyle,
     combatTeamPinScale = PIN_DEFAULTS.combatTeamPinScale,
     stackTeamPins = true,
-    fanOutTeamPinsOnHover = true,
-    excludePlayerArrowFromStack = false,
+    fanOutTeamPinsOnHover = false,
+    excludePlayerArrowFromStack = true,
     teamPinStackRadius = PLAYER_PIN_DEFAULTS.teamPinStackRadius,
     teamPinStackOverlap = PLAYER_PIN_DEFAULTS.teamPinStackOverlap,
     teamPinStackDirection = "compact",
-    showTeamSpecIcons = true,
+    showTeamSpecIcons = false,
     healerIconColorMode = PLAYER_PIN_DEFAULTS.healerIconColorMode,
-    healerIconCustomColor = { r = 1.00, g = 1.00, b = 1.00 },
+    healerIconCustomColor = {
+        r = 0.4431372880935669,
+        g = 1.00,
+        b = 0.3607843220233917,
+    },
     objectivePinScale = PIN_DEFAULTS.objectivePinScale,
     objectivePinAlpha = PIN_DEFAULTS.objectivePinAlpha,
     carrierObjectivePinScale = PIN_DEFAULTS.carrierObjectivePinScale,
@@ -206,16 +218,17 @@ local ROOT_DEFAULTS = {
         useBlizzardOnWorldMap = true,
         colorByFaction = true,
         scale = 1.00,
-        width = 520,
-        justifyH = "CENTER",
-        anchorMode = "INDEPENDENT",
-        mapAnchorSide = "TOP",
-        point = "TOP",
-        relativePoint = "TOP",
-        x = 0,
-        y = -100,
-        mapX = 0,
-        mapY = 28,
+        width = 360,
+        justifyH = "RIGHT",
+        anchorMode = "MAP",
+        mapAnchorSide = "LEFT",
+        notificationAnchorPoint = "AUTO",
+        point = "RIGHT",
+        relativePoint = "RIGHT",
+        x = -1.185360550880432,
+        y = -300,
+        mapX = -22,
+        mapY = 68,
         attachmentVersion = 2,
     },
     customFrameVersion = 2,
@@ -230,94 +243,129 @@ local ROOT_DEFAULTS = {
 
 local PERSONAL_MAP_DEFAULTS = {
     [112] = {
-        width = 414.073974609375,
-        height = 345.185180664062,
+        width = 411.629638671875,
+        height = 306.0003967285156,
         configured = true,
-        customZoom = 2.60869565217391,
-        customPanX = 0.479416082159281,
-        customPanY = 0.429533467756182,
+        customZoom = 1.972548697295965,
+        customPanX = 0.4836261377580955,
+        customPanY = 0.439103818491639,
         useGlobalPlayerPinSettings = false,
         useGlobalObjectiveSettings = false,
         playerPins = {
-            playerArrowSize = 33,
-            teamMemberPinSize = 12,
-            healerPinSize = PIN_DEFAULTS.healerPinSize,
+            playerArrowSize = 45,
+            playerPinStyle = "arrow",
+            playerFovStyle = "sunbeam",
+            playerFovScale = 2.2,
+            playerFovAlpha = 1,
+            playerFovBeamAlpha = 0.25,
+            teamMemberPinSize = 9,
+            healerPinSize = 19,
+            teamPinBorderScale = 1,
+            healerPinStyle = "icon",
             combatTeamPinScale = 1,
             stackTeamPins = true,
+            fanOutTeamPinsOnHover = true,
             excludePlayerArrowFromStack = true,
-            teamPinStackRadius = 15,
-            teamPinStackOverlap = 25,
+            teamPinStackRadius = 10,
+            teamPinStackOverlap = 20,
             teamPinStackDirection = "compact",
+            showTeamSpecIcons = false,
+            healerIconColorMode = "class",
+            healerIconCustomColor = {
+                b = 0.2745098173618317,
+                g = 1,
+                r = 0.2549019753932953,
+            },
         },
         objectives = {
-            objectivePinScale = 1.6,
-            objectivePinAlpha = 1,
+            objectivePinScale = 2.1,
+            objectivePinAlpha = 0.95,
             carrierObjectivePinScale = 1,
             vehicleObjectivePinScale = 1,
             showFlagCarrierTrail = true,
             carriedTrailStyle = "breadcrumbs",
             carriedTrailDuration = 12,
             carriedTrailDotScale = 0.7,
+            carriedTrailDetail = 16,
+            carriedObjectiveColorMode = "original",
             flashCarriedObjectives = true,
             carriedObjectiveFlashPeriod = 0.7,
             carriedObjectiveFlashStrength = 0.95,
         },
         timers = {
-            showObjectivePulseAnimations = true,
+            showObjectivePulseAnimations = false,
             showObjectiveCaptureTimers = true,
             pulseObjectiveDuringCaptureTimer = true,
             flashObjectiveBeforeCapture = true,
             objectiveCaptureFlashThreshold = 10,
-            objectiveCaptureFlashBrightness = 0.25,
-            objectiveCapturePulseMinAlpha = 0.4,
-            objectiveCapturePulseMaxAlpha = 0.6,
+            objectiveCaptureFlashBrightness = 0.2,
+            objectiveCapturePulseMinAlpha = 0.7,
+            objectiveCapturePulseMaxAlpha = 0.9,
             objectiveCaptureAfterPulseAlpha = 0.36,
             showObjectiveTimerText = false,
             showObjectiveBlitzUncapText = true,
-            objectiveTimerTextThreshold = 9,
-            objectiveTimerTextSize = 16,
-            objectiveTimerTextAlpha = 0.8,
+            objectiveTimerTextThreshold = 59,
+            objectiveTimerTextSize = 25,
+            objectiveTimerTextAlpha = 0.55,
             objectiveTimerTextOffsetX = 0,
             objectiveTimerTextOffsetY = 0,
-            objectiveTimerTextFont = "Expressway",
+            objectiveTimerTextFont = "Accidental Presidency",
+            objectiveTimerTextColorMode = "custom",
             objectiveTimerTextColor = {
-                r = 0.99215692281723,
+                b = 0.9725490808486938,
                 g = 1,
-                b = 0.258823543787003,
+                r = 0.9843137860298157,
             },
             objectiveCaptureFillDirection = "horizontal",
             objectiveCapturePulseCount = 3,
         },
     },
     [206] = {
-        width = 270.814880371094,
-        height = 452.740753173828,
+        width = 261.9263610839844,
+        height = 453.3333129882813,
         configured = true,
         customZoom = 3,
-        customPanX = 0.524525871302152,
-        customPanY = 0.493237019190261,
+        customPanX = 0.5304060824946187,
+        customPanY = 0.4884276281097376,
         useGlobalPlayerPinSettings = false,
         useGlobalObjectiveSettings = false,
         playerPins = {
-            playerArrowSize = 22,
-            teamMemberPinSize = 11,
-            healerPinSize = PIN_DEFAULTS.healerPinSize,
+            playerArrowSize = 45,
+            playerPinStyle = "arrow",
+            playerFovStyle = "coldRays",
+            playerFovScale = 1.9,
+            playerFovAlpha = 1,
+            playerFovBeamAlpha = 0.25,
+            teamMemberPinSize = 8,
+            healerPinSize = 20,
+            teamPinBorderScale = 1,
+            healerPinStyle = "icon",
             combatTeamPinScale = 1,
             stackTeamPins = true,
-            excludePlayerArrowFromStack = false,
-            teamPinStackRadius = 18,
+            fanOutTeamPinsOnHover = true,
+            excludePlayerArrowFromStack = true,
+            teamPinStackRadius = 10,
             teamPinStackOverlap = 25,
             teamPinStackDirection = "compact",
+            showTeamSpecIcons = false,
+            healerIconColorMode = "class",
+            healerIconCustomColor = {
+                r = 0.09019608050584793,
+                g = 1,
+                b = 0,
+            },
         },
         objectives = {
             objectivePinScale = 1,
             objectivePinAlpha = 1,
-            carrierObjectivePinScale = 0.8,
+            carrierObjectivePinScale = 1.05,
             vehicleObjectivePinScale = 1,
             showFlagCarrierTrail = true,
             carriedTrailStyle = "glow",
-            carriedTrailDuration = 20,
-            carriedTrailDotScale = 1.25,
+            carriedTrailDuration = 30,
+            carriedTrailDotScale = 0.4,
+            carriedTrailDetail = 24,
+            carriedObjectiveColorMode = "original",
             flashCarriedObjectives = true,
             carriedObjectiveFlashPeriod = 0.7,
             carriedObjectiveFlashStrength = 0.7,
@@ -340,44 +388,62 @@ local PERSONAL_MAP_DEFAULTS = {
             objectiveTimerTextOffsetX = 0,
             objectiveTimerTextOffsetY = 0,
             objectiveTimerTextFont = "friz",
+            objectiveTimerTextColorMode = "custom",
             objectiveTimerTextColor = {
-                r = 1,
-                g = 1,
                 b = 1,
+                g = 1,
+                r = 1,
             },
             objectiveCaptureFillDirection = "horizontal",
             objectiveCapturePulseCount = 1,
         },
     },
     [210] = {
-        width = 386.221740722656,
-        height = 304.888793945312,
+        width = 416,
+        height = 346,
         configured = true,
         customZoom = 3,
-        customPanX = 0.479631734721611,
-        customPanY = 0.5,
+        customPanX = 0.4844634809741701,
+        customPanY = 0.496770698648,
         useGlobalPlayerPinSettings = false,
         useGlobalObjectiveSettings = false,
         playerPins = {
-            playerArrowSize = 28,
-            teamMemberPinSize = 9,
-            healerPinSize = PIN_DEFAULTS.healerPinSize,
+            playerArrowSize = 36,
+            playerPinStyle = "arrow",
+            playerFovStyle = "sunbeam",
+            playerFovScale = 1.75,
+            playerFovAlpha = 1,
+            playerFovBeamAlpha = 0.25,
+            teamMemberPinSize = 7,
+            healerPinSize = 19.5,
+            teamPinBorderScale = 1,
+            healerPinStyle = "icon",
             combatTeamPinScale = 1,
             stackTeamPins = true,
+            fanOutTeamPinsOnHover = true,
             excludePlayerArrowFromStack = true,
-            teamPinStackRadius = 14,
-            teamPinStackOverlap = 40,
+            teamPinStackRadius = 8,
+            teamPinStackOverlap = 0,
             teamPinStackDirection = "compact",
+            showTeamSpecIcons = false,
+            healerIconColorMode = "class",
+            healerIconCustomColor = {
+                r = 0,
+                g = 1,
+                b = 0.01176470704376698,
+            },
         },
         objectives = {
-            objectivePinScale = 1.4,
-            objectivePinAlpha = 0.85,
-            carrierObjectivePinScale = 0.95,
+            objectivePinScale = 1.55,
+            objectivePinAlpha = 1,
+            carrierObjectivePinScale = 1.15,
             vehicleObjectivePinScale = 1,
             showFlagCarrierTrail = true,
             carriedTrailStyle = "glow",
             carriedTrailDuration = 20,
-            carriedTrailDotScale = 1.25,
+            carriedTrailDotScale = 2.2,
+            carriedTrailDetail = 16,
+            carriedObjectiveColorMode = "original",
             flashCarriedObjectives = true,
             carriedObjectiveFlashPeriod = 0.55,
             carriedObjectiveFlashStrength = 0.35,
@@ -392,45 +458,61 @@ local PERSONAL_MAP_DEFAULTS = {
             objectiveCapturePulseMinAlpha = 0.45,
             objectiveCapturePulseMaxAlpha = 0.65,
             objectiveCaptureAfterPulseAlpha = 0.36,
-            showObjectiveTimerText = false,
+            showObjectiveTimerText = true,
             showObjectiveBlitzUncapText = true,
             objectiveTimerTextThreshold = 9,
             objectiveTimerTextSize = 14,
             objectiveTimerTextAlpha = 1,
             objectiveTimerTextOffsetX = 0,
             objectiveTimerTextOffsetY = 0,
-            objectiveTimerTextFont = "friz",
+            objectiveTimerTextFont = "Expressway",
+            objectiveTimerTextColorMode = "custom",
             objectiveTimerTextColor = {
+                b = 0,
+                g = 0.8196079134941101,
                 r = 1,
-                g = 1,
-                b = 1,
             },
             objectiveCaptureFillDirection = "vertical",
             objectiveCapturePulseCount = 1,
         },
     },
     [275] = {
-        width = 416.740142822266,
-        height = 350.518829345703,
+        width = 416.9999389648438,
+        height = 351.0000305175781,
         configured = true,
-        customZoom = 2.60869565217391,
-        customPanX = 0.496748880524483,
-        customPanY = 0.575883986963143,
+        customZoom = 1.972548697295965,
+        customPanX = 0.4960182779557474,
+        customPanY = 0.5901374970511981,
         useGlobalPlayerPinSettings = false,
         useGlobalObjectiveSettings = false,
         playerPins = {
-            playerArrowSize = 22,
-            teamMemberPinSize = 6,
-            healerPinSize = PIN_DEFAULTS.healerPinSize,
+            playerArrowSize = 51,
+            playerPinStyle = "arrow",
+            playerFovStyle = "sunbeam",
+            playerFovScale = 2.6,
+            playerFovAlpha = 1,
+            playerFovBeamAlpha = 0.25,
+            teamMemberPinSize = 10,
+            healerPinSize = 16,
+            teamPinBorderScale = 1,
+            healerPinStyle = "icon",
             combatTeamPinScale = 1,
             stackTeamPins = true,
-            excludePlayerArrowFromStack = false,
+            fanOutTeamPinsOnHover = true,
+            excludePlayerArrowFromStack = true,
             teamPinStackRadius = 18,
-            teamPinStackOverlap = 35,
+            teamPinStackOverlap = 20,
             teamPinStackDirection = "compact",
+            showTeamSpecIcons = true,
+            healerIconColorMode = "class",
+            healerIconCustomColor = {
+                r = 1,
+                g = 1,
+                b = 1,
+            },
         },
         objectives = {
-            objectivePinScale = 1.45,
+            objectivePinScale = 2.5,
             objectivePinAlpha = 0.9,
             carrierObjectivePinScale = 1,
             vehicleObjectivePinScale = 1,
@@ -438,6 +520,8 @@ local PERSONAL_MAP_DEFAULTS = {
             carriedTrailStyle = "breadcrumbs",
             carriedTrailDuration = 10,
             carriedTrailDotScale = 0.7,
+            carriedTrailDetail = 16,
+            carriedObjectiveColorMode = "original",
             flashCarriedObjectives = true,
             carriedObjectiveFlashPeriod = 0.7,
             carriedObjectiveFlashStrength = 0.95,
@@ -446,7 +530,7 @@ local PERSONAL_MAP_DEFAULTS = {
             showObjectivePulseAnimations = true,
             showObjectiveCaptureTimers = true,
             pulseObjectiveDuringCaptureTimer = true,
-            flashObjectiveBeforeCapture = false,
+            flashObjectiveBeforeCapture = true,
             objectiveCaptureFlashThreshold = 9,
             objectiveCaptureFlashBrightness = 0.25,
             objectiveCapturePulseMinAlpha = 0.4,
@@ -455,51 +539,67 @@ local PERSONAL_MAP_DEFAULTS = {
             showObjectiveTimerText = true,
             showObjectiveBlitzUncapText = true,
             objectiveTimerTextThreshold = 9,
-            objectiveTimerTextSize = 14,
-            objectiveTimerTextAlpha = 1,
-            objectiveTimerTextOffsetX = 0,
-            objectiveTimerTextOffsetY = 0,
-            objectiveTimerTextFont = "friz",
+            objectiveTimerTextSize = 8,
+            objectiveTimerTextAlpha = 0.85,
+            objectiveTimerTextOffsetX = 1,
+            objectiveTimerTextOffsetY = -3,
+            objectiveTimerTextFont = "Expressway",
+            objectiveTimerTextColorMode = "custom",
             objectiveTimerTextColor = {
-                r = 1,
-                g = 1,
-                b = 1,
+                r = 0.8784314393997192,
+                g = 0.8235294818878174,
+                b = 0.1529411822557449,
             },
-            objectiveCaptureFillDirection = "horizontal",
+            objectiveCaptureFillDirection = "vertical",
             objectiveCapturePulseCount = 1,
         },
     },
     [417] = {
-        width = 414.963897705078,
-        height = 284.148620605469,
+        width = 408.5187683105469,
+        height = 315.3334655761719,
         configured = true,
-        customZoom = 1.97254869729596,
-        customPanX = 0.489605127946207,
-        customPanY = 0.534447066394035,
+        customZoom = 2.26843100189036,
+        customPanX = 0.4868067618801732,
+        customPanY = 0.5285561673016094,
         useGlobalPlayerPinSettings = false,
         useGlobalObjectiveSettings = false,
         playerPins = {
-            playerArrowSize = 45,
-            teamMemberPinSize = 13,
-            healerPinSize = PIN_DEFAULTS.healerPinSize,
+            playerArrowSize = 60,
+            playerPinStyle = "arrow",
+            playerFovStyle = "sunbeam",
+            playerFovScale = 1.8,
+            playerFovAlpha = 0.75,
+            playerFovBeamAlpha = 0.25,
+            teamMemberPinSize = 9,
+            healerPinSize = 16,
+            teamPinBorderScale = 1,
+            healerPinStyle = "icon",
             combatTeamPinScale = 1,
             stackTeamPins = true,
+            fanOutTeamPinsOnHover = true,
             excludePlayerArrowFromStack = true,
             teamPinStackRadius = 40,
-            teamPinStackOverlap = 25,
+            teamPinStackOverlap = 30,
             teamPinStackDirection = "compact",
+            showTeamSpecIcons = true,
+            healerIconColorMode = "class",
+            healerIconCustomColor = {
+                r = 0.917647123336792,
+                g = 1,
+                b = 0.9137255549430847,
+            },
         },
         objectives = {
-            objectivePinScale = 0.95,
-            objectivePinAlpha = 0.65,
+            objectivePinScale = 1.25,
+            objectivePinAlpha = 1,
             carrierObjectivePinScale = 0.8,
             vehicleObjectivePinScale = 1,
             showFlagCarrierTrail = true,
-            carriedTrailStyle = "glow",
-            carriedTrailDuration = 20,
-            carriedTrailDotScale = 1.25,
-            carriedTrailDetail = 16,
-            factionColorEnemyKotmoguOrbs = true,
+            carriedTrailStyle = "tether",
+            carriedTrailDuration = 2.25,
+            carriedTrailDotScale = 1.7,
+            carriedTrailDetail = 24,
+            carriedObjectiveColorMode = "faction",
             flashCarriedObjectives = true,
             carriedObjectiveFlashPeriod = 0.6,
             carriedObjectiveFlashStrength = 0.4,
@@ -522,34 +622,50 @@ local PERSONAL_MAP_DEFAULTS = {
             objectiveTimerTextOffsetX = 0,
             objectiveTimerTextOffsetY = 0,
             objectiveTimerTextFont = "friz",
+            objectiveTimerTextColorMode = "custom",
             objectiveTimerTextColor = {
-                r = 1,
-                g = 1,
                 b = 1,
+                g = 1,
+                r = 1,
             },
             objectiveCaptureFillDirection = "horizontal",
             objectiveCapturePulseCount = 1,
         },
     },
     [423] = {
-        width = 372.296203613281,
-        height = 301.925842285156,
+        width = 372.2962036132813,
+        height = 301.9258422851563,
         configured = true,
         customZoom = 1.49153020589487,
-        customPanX = 0.455047219942502,
-        customPanY = 0.522967005510735,
+        customPanX = 0.4569815519585109,
+        customPanY = 0.5272656157325321,
         useGlobalPlayerPinSettings = false,
         useGlobalObjectiveSettings = true,
         playerPins = {
-            playerArrowSize = 22,
-            teamMemberPinSize = 12,
-            healerPinSize = PIN_DEFAULTS.healerPinSize,
+            playerArrowSize = 45,
+            playerPinStyle = "arrow",
+            playerFovStyle = "sunbeam",
+            playerFovScale = 2.6,
+            playerFovAlpha = 1,
+            playerFovBeamAlpha = 0.25,
+            teamMemberPinSize = 10,
+            healerPinSize = 19.5,
+            teamPinBorderScale = 1,
+            healerPinStyle = "icon",
             combatTeamPinScale = 1,
             stackTeamPins = true,
-            excludePlayerArrowFromStack = false,
-            teamPinStackRadius = 18,
-            teamPinStackOverlap = 10,
+            fanOutTeamPinsOnHover = true,
+            excludePlayerArrowFromStack = true,
+            teamPinStackRadius = 17,
+            teamPinStackOverlap = 0,
             teamPinStackDirection = "compact",
+            showTeamSpecIcons = true,
+            healerIconColorMode = "class",
+            healerIconCustomColor = {
+                r = 0.1882353127002716,
+                g = 0.803921639919281,
+                b = 0,
+            },
         },
         objectives = {
             objectivePinScale = 1,
@@ -560,6 +676,8 @@ local PERSONAL_MAP_DEFAULTS = {
             carriedTrailStyle = "breadcrumbs",
             carriedTrailDuration = 10,
             carriedTrailDotScale = 0.7,
+            carriedTrailDetail = 16,
+            carriedObjectiveColorMode = "original",
             flashCarriedObjectives = true,
             carriedObjectiveFlashPeriod = 0.7,
             carriedObjectiveFlashStrength = 0.95,
@@ -582,34 +700,50 @@ local PERSONAL_MAP_DEFAULTS = {
             objectiveTimerTextOffsetX = 0,
             objectiveTimerTextOffsetY = 0,
             objectiveTimerTextFont = "friz",
+            objectiveTimerTextColorMode = "custom",
             objectiveTimerTextColor = {
-                r = 1,
-                g = 1,
                 b = 1,
+                g = 1,
+                r = 1,
             },
             objectiveCaptureFillDirection = "horizontal",
             objectiveCapturePulseCount = 1,
         },
     },
     [907] = {
-        width = 365.630310058594,
-        height = 345.407379150391,
+        width = 372.0000610351563,
+        height = 301.9999694824219,
         configured = true,
-        customZoom = 1.97254869729596,
-        customPanX = 0.435774532159024,
-        customPanY = 0.482548887169603,
-        useGlobalPlayerPinSettings = true,
+        customZoom = 1.7152597367791,
+        customPanX = 0.4501366273719146,
+        customPanY = 0.5399246356733366,
+        useGlobalPlayerPinSettings = false,
         useGlobalObjectiveSettings = false,
         playerPins = {
-            playerArrowSize = 34,
-            teamMemberPinSize = 13,
-            healerPinSize = PIN_DEFAULTS.healerPinSize,
+            playerArrowSize = 50,
+            playerPinStyle = "arrow",
+            playerFovStyle = "sunbeam",
+            playerFovScale = 2.3,
+            playerFovAlpha = 1,
+            playerFovBeamAlpha = 0.25,
+            teamMemberPinSize = 9,
+            healerPinSize = 20.5,
+            teamPinBorderScale = 1,
+            healerPinStyle = "icon",
             combatTeamPinScale = 1,
             stackTeamPins = true,
+            fanOutTeamPinsOnHover = true,
             excludePlayerArrowFromStack = true,
             teamPinStackRadius = 22,
-            teamPinStackOverlap = 40,
+            teamPinStackOverlap = 10,
             teamPinStackDirection = "compact",
+            showTeamSpecIcons = true,
+            healerIconColorMode = "class",
+            healerIconCustomColor = {
+                r = 1,
+                g = 1,
+                b = 1,
+            },
         },
         objectives = {
             objectivePinScale = 2.5,
@@ -620,6 +754,8 @@ local PERSONAL_MAP_DEFAULTS = {
             carriedTrailStyle = "breadcrumbs",
             carriedTrailDuration = 10,
             carriedTrailDotScale = 0.7,
+            carriedTrailDetail = 16,
+            carriedObjectiveColorMode = "original",
             flashCarriedObjectives = true,
             carriedObjectiveFlashPeriod = 0.7,
             carriedObjectiveFlashStrength = 0.95,
@@ -628,58 +764,76 @@ local PERSONAL_MAP_DEFAULTS = {
             showObjectivePulseAnimations = true,
             showObjectiveCaptureTimers = true,
             pulseObjectiveDuringCaptureTimer = true,
-            flashObjectiveBeforeCapture = false,
+            flashObjectiveBeforeCapture = true,
             objectiveCaptureFlashThreshold = 9,
             objectiveCaptureFlashBrightness = 0.25,
-            objectiveCapturePulseMinAlpha = 0.4,
+            objectiveCapturePulseMinAlpha = 0.25,
             objectiveCapturePulseMaxAlpha = 0.6,
             objectiveCaptureAfterPulseAlpha = 0.36,
             showObjectiveTimerText = true,
             showObjectiveBlitzUncapText = true,
-            objectiveTimerTextThreshold = 9,
-            objectiveTimerTextSize = 14,
-            objectiveTimerTextAlpha = 1,
+            objectiveTimerTextThreshold = 59,
+            objectiveTimerTextSize = 12,
+            objectiveTimerTextAlpha = 0.85,
             objectiveTimerTextOffsetX = 0,
             objectiveTimerTextOffsetY = 0,
-            objectiveTimerTextFont = "friz",
+            objectiveTimerTextFont = "Expressway",
+            objectiveTimerTextColorMode = "custom",
             objectiveTimerTextColor = {
-                r = 1,
-                g = 1,
                 b = 1,
+                g = 1,
+                r = 1,
             },
-            objectiveCaptureFillDirection = "horizontal",
+            objectiveCaptureFillDirection = "vertical",
             objectiveCapturePulseCount = 1,
         },
     },
     [1339] = {
-        width = 249.481552124023,
-        height = 431.407867431641,
+        width = 249.4815521240234,
+        height = 431.4078674316406,
         configured = true,
         customZoom = 3,
-        customPanX = 0.5161875840712,
-        customPanY = 0.522830520067089,
+        customPanX = 0.5442577401943665,
+        customPanY = 0.5142659117594052,
         useGlobalPlayerPinSettings = false,
         useGlobalObjectiveSettings = false,
         playerPins = {
-            playerArrowSize = 28,
-            teamMemberPinSize = 10,
-            healerPinSize = PIN_DEFAULTS.healerPinSize,
+            playerArrowSize = 45,
+            playerPinStyle = "arrow",
+            playerFovStyle = "sunbeam",
+            playerFovScale = 2.75,
+            playerFovAlpha = 1,
+            playerFovBeamAlpha = 0.25,
+            teamMemberPinSize = 9,
+            healerPinSize = 19,
+            teamPinBorderScale = 1,
+            healerPinStyle = "icon",
             combatTeamPinScale = 1,
             stackTeamPins = true,
+            fanOutTeamPinsOnHover = true,
             excludePlayerArrowFromStack = true,
             teamPinStackRadius = 18,
-            teamPinStackOverlap = 25,
+            teamPinStackOverlap = 0,
             teamPinStackDirection = "compact",
+            showTeamSpecIcons = true,
+            healerIconColorMode = "class",
+            healerIconCustomColor = {
+                r = 0.3137255012989044,
+                g = 0.8862745761871338,
+                b = 0.2196078598499298,
+            },
         },
         objectives = {
             objectivePinScale = 1,
             objectivePinAlpha = 1,
-            carrierObjectivePinScale = 1.3,
+            carrierObjectivePinScale = 1.05,
             vehicleObjectivePinScale = 1,
             showFlagCarrierTrail = true,
             carriedTrailStyle = "glow",
-            carriedTrailDuration = 15.25,
-            carriedTrailDotScale = 2.9,
+            carriedTrailDuration = 30,
+            carriedTrailDotScale = 1,
+            carriedTrailDetail = 24,
+            carriedObjectiveColorMode = "original",
             flashCarriedObjectives = true,
             carriedObjectiveFlashPeriod = 0.8,
             carriedObjectiveFlashStrength = 0.45,
@@ -702,44 +856,62 @@ local PERSONAL_MAP_DEFAULTS = {
             objectiveTimerTextOffsetX = 0,
             objectiveTimerTextOffsetY = 0,
             objectiveTimerTextFont = "friz",
+            objectiveTimerTextColorMode = "custom",
             objectiveTimerTextColor = {
-                r = 1,
-                g = 1,
                 b = 1,
+                g = 1,
+                r = 1,
             },
             objectiveCaptureFillDirection = "horizontal",
             objectiveCapturePulseCount = 1,
         },
     },
     [1576] = {
-        width = 415.555877685547,
-        height = 396.740966796875,
+        width = 416.7409362792969,
+        height = 390.2226257324219,
         configured = true,
         customZoom = 1.520875,
-        customPanX = 0.527886807550305,
-        customPanY = 0.509285156039878,
-        useGlobalPlayerPinSettings = false,
-        useGlobalObjectiveSettings = true,
+        customPanX = 0.5,
+        customPanY = 0.5,
+        useGlobalPlayerPinSettings = true,
+        useGlobalObjectiveSettings = false,
         playerPins = {
-            playerArrowSize = 31,
-            teamMemberPinSize = 12,
-            healerPinSize = PIN_DEFAULTS.healerPinSize,
+            playerArrowSize = 128,
+            playerPinStyle = "compass",
+            playerFovStyle = "sunbeam",
+            playerFovScale = 3,
+            playerFovAlpha = 1,
+            playerFovBeamAlpha = 0.25,
+            teamMemberPinSize = 14,
+            healerPinSize = 16,
+            teamPinBorderScale = 1,
+            healerPinStyle = "icon",
             combatTeamPinScale = 1,
             stackTeamPins = true,
-            excludePlayerArrowFromStack = false,
-            teamPinStackRadius = 36,
-            teamPinStackOverlap = 25,
+            fanOutTeamPinsOnHover = true,
+            excludePlayerArrowFromStack = true,
+            teamPinStackRadius = 37,
+            teamPinStackOverlap = 35,
             teamPinStackDirection = "compact",
+            showTeamSpecIcons = false,
+            healerIconColorMode = "class",
+            healerIconCustomColor = {
+                r = 0.1529411822557449,
+                g = 1,
+                b = 0,
+            },
         },
         objectives = {
-            objectivePinScale = 1,
-            objectivePinAlpha = 1,
+            objectivePinScale = 2.5,
+            objectivePinAlpha = 0.9,
             carrierObjectivePinScale = 1,
             vehicleObjectivePinScale = 1,
             showFlagCarrierTrail = true,
             carriedTrailStyle = "breadcrumbs",
             carriedTrailDuration = 10,
             carriedTrailDotScale = 0.7,
+            carriedTrailDetail = 16,
+            carriedObjectiveColorMode = "original",
             flashCarriedObjectives = true,
             carriedObjectiveFlashPeriod = 0.7,
             carriedObjectiveFlashStrength = 0.95,
@@ -754,45 +926,61 @@ local PERSONAL_MAP_DEFAULTS = {
             objectiveCapturePulseMinAlpha = 0.4,
             objectiveCapturePulseMaxAlpha = 0.6,
             objectiveCaptureAfterPulseAlpha = 0.36,
-            showObjectiveTimerText = true,
+            showObjectiveTimerText = false,
             showObjectiveBlitzUncapText = true,
-            objectiveTimerTextThreshold = 9,
+            objectiveTimerTextThreshold = 59,
             objectiveTimerTextSize = 14,
             objectiveTimerTextAlpha = 1,
             objectiveTimerTextOffsetX = 0,
             objectiveTimerTextOffsetY = 0,
-            objectiveTimerTextFont = "friz",
+            objectiveTimerTextFont = "Expressway",
+            objectiveTimerTextColorMode = "custom",
             objectiveTimerTextColor = {
                 r = 1,
-                g = 1,
-                b = 1,
+                g = 0.8431373238563538,
+                b = 0.3843137621879578,
             },
             objectiveCaptureFillDirection = "horizontal",
             objectiveCapturePulseCount = 1,
         },
     },
     [2345] = {
-        width = 464.334106445312,
-        height = 298.333282470703,
+        width = 416.9265441894531,
+        height = 228.4074859619141,
         configured = true,
         customZoom = 1.520875,
-        customPanX = 0.5,
-        customPanY = 0.5,
+        customPanX = 0.5304078978952738,
+        customPanY = 0.5003964727195013,
         useGlobalPlayerPinSettings = false,
-        useGlobalObjectiveSettings = true,
+        useGlobalObjectiveSettings = false,
         playerPins = {
             playerArrowSize = 41,
-            teamMemberPinSize = 15,
-            healerPinSize = PIN_DEFAULTS.healerPinSize,
+            playerPinStyle = "arrow",
+            playerFovStyle = "sunbeam",
+            playerFovScale = 3.25,
+            playerFovAlpha = 0.65,
+            playerFovBeamAlpha = 0.25,
+            teamMemberPinSize = 13,
+            healerPinSize = 20.5,
+            teamPinBorderScale = 1,
+            healerPinStyle = "icon",
             combatTeamPinScale = 1,
             stackTeamPins = true,
+            fanOutTeamPinsOnHover = true,
             excludePlayerArrowFromStack = true,
-            teamPinStackRadius = 15,
-            teamPinStackOverlap = 20,
+            teamPinStackRadius = 31,
+            teamPinStackOverlap = 30,
             teamPinStackDirection = "compact",
+            showTeamSpecIcons = false,
+            healerIconColorMode = "class",
+            healerIconCustomColor = {
+                r = 1,
+                g = 1,
+                b = 1,
+            },
         },
         objectives = {
-            objectivePinScale = 1.75,
+            objectivePinScale = 2.2,
             objectivePinAlpha = 1,
             carrierObjectivePinScale = 1,
             vehicleObjectivePinScale = 1,
@@ -800,6 +988,8 @@ local PERSONAL_MAP_DEFAULTS = {
             carriedTrailStyle = "breadcrumbs",
             carriedTrailDuration = 10,
             carriedTrailDotScale = 0.7,
+            carriedTrailDetail = 16,
+            carriedObjectiveColorMode = "original",
             flashCarriedObjectives = true,
             carriedObjectiveFlashPeriod = 0.7,
             carriedObjectiveFlashStrength = 0.95,
@@ -822,10 +1012,11 @@ local PERSONAL_MAP_DEFAULTS = {
             objectiveTimerTextOffsetX = 0,
             objectiveTimerTextOffsetY = 0,
             objectiveTimerTextFont = "friz",
+            objectiveTimerTextColorMode = "custom",
             objectiveTimerTextColor = {
-                r = 1,
-                g = 1,
                 b = 1,
+                g = 1,
+                r = 1,
             },
             objectiveCaptureFillDirection = "horizontal",
             objectiveCapturePulseCount = 1,
@@ -878,6 +1069,18 @@ end
 local function NormalizeCarriedTrailStyle(value)
     if value == "glow" or value == "tether" then return value end
     return "breadcrumbs"
+end
+
+local function NormalizeCarriedObjectiveColorMode(value, legacyKotmoguMode, legacyEnemyTint)
+    if value == "original" or value == "faction" then return value end
+    if legacyKotmoguMode == "faction" then return "faction" end
+    if legacyKotmoguMode == "orb" then return "original" end
+    -- The retired "enemy" Kotmogu mode mixed original and faction colouring,
+    -- so it has no exact equivalent. Migrate it to Original, which preserves
+    -- the objective artwork rather than recolouring every friendly carrier.
+    if legacyKotmoguMode == "enemy" then return "original" end
+    if legacyEnemyTint == false then return "original" end
+    return OBJECTIVE_PIN_DEFAULTS.carriedObjectiveColorMode
 end
 
 local function CopyDefaults(source, destination)
@@ -989,7 +1192,17 @@ local function MigrateLegacyPinBuckets(config)
     end
     config.pins = CopyDefaults(PIN_DEFAULTS, config.pins)
     config.playerPins = CopyDefaults(PLAYER_PIN_DEFAULTS, playerPins)
-    config.objectives = CopyDefaults(OBJECTIVE_PIN_DEFAULTS, config.objectives)
+    local objectiveSettings = type(config.objectives) == "table" and config.objectives or {}
+    if objectiveSettings.carriedObjectiveColorMode == nil then
+        objectiveSettings.carriedObjectiveColorMode = NormalizeCarriedObjectiveColorMode(
+            nil,
+            objectiveSettings.kotmoguOrbColorMode,
+            objectiveSettings.factionColorEnemyKotmoguOrbs
+        )
+    end
+    objectiveSettings.kotmoguOrbColorMode = nil
+    objectiveSettings.factionColorEnemyKotmoguOrbs = nil
+    config.objectives = CopyDefaults(OBJECTIVE_PIN_DEFAULTS, objectiveSettings)
     config.timers = CopyDefaults(TIMER_DEFAULTS, config.timers)
     config.notifications = CopyDefaults(NOTIFICATION_DEFAULTS, config.notifications)
 
@@ -1110,8 +1323,45 @@ function Database:Initialize()
         and BattleMapsDB.fovBoundaryMask == true
     local hadFovBeamMask = type(BattleMapsDB) == "table"
         and BattleMapsDB.fovBeamMask ~= nil
+    local previousCarriedObjectiveColorMode = type(BattleMapsDB) == "table"
+        and BattleMapsDB.carriedObjectiveColorMode or nil
+    local previousKotmoguOrbColorMode = type(BattleMapsDB) == "table"
+        and BattleMapsDB.kotmoguOrbColorMode or nil
+    local previousKotmoguEnemyTint = type(BattleMapsDB) == "table"
+        and BattleMapsDB.factionColorEnemyKotmoguOrbs
+    local previousMovePlayerAurasSetting = nil
+    if type(BattleMapsDB) == "table" then
+        -- Prefer the provider-neutral key introduced by AuraLayout. 3.0.3's
+        -- General-page checkbox still read the older alias, which could be
+        -- false even after the canonical value had been enabled. Reading the
+        -- canonical key first prevents /reload from resetting the option.
+        if BattleMapsDB.bgLayoutMovePlayerAuras ~= nil then
+            previousMovePlayerAurasSetting = BattleMapsDB.bgLayoutMovePlayerAuras == true
+        elseif BattleMapsDB.movePlayerAurasToMinimapArea ~= nil then
+            previousMovePlayerAurasSetting = BattleMapsDB.movePlayerAurasToMinimapArea == true
+        elseif BattleMapsDB.elvuiBGLayoutMovePlayerAuras ~= nil then
+            previousMovePlayerAurasSetting = (BattleMapsDB.elvuiBGLayoutEnabled ~= false)
+                and BattleMapsDB.elvuiBGLayoutMovePlayerAuras == true
+        end
+    end
 
     BattleMapsDB = CopyDefaults(ROOT_DEFAULTS, BattleMapsDB)
+    -- 2.8.8 briefly prototyped this as a nameplate aura. The feature now
+    -- belongs to ElvUI group unit frames in BattleMaps; discard the test key.
+    BattleMapsDB.showFriendlyFlagCarrierNameplateAura = nil
+    -- 2.8.11 safety hotfix: retire the ElvUI secure unit-frame overlay experiment.
+    BattleMapsDB.showFlagCarrierUnitFrameIcon = nil
+
+    -- Migrate the former ElvUI-only aura placement preference to the provider-
+    -- neutral battleground layout option. Clean installs default to off; users
+    -- who already enabled the personal ElvUI layout keep that preference.
+    if previousMovePlayerAurasSetting ~= nil then
+        BattleMapsDB.bgLayoutMovePlayerAuras = previousMovePlayerAurasSetting
+        BattleMapsDB.movePlayerAurasToMinimapArea = previousMovePlayerAurasSetting
+    end
+    BattleMapsDB.elvuiBGLayoutEnabled = nil
+    BattleMapsDB.elvuiBGLayoutMovePlayerAuras = nil
+    BattleMapsDB.elvuiBGLayoutState = nil
     BattleMapsDB.maps = BattleMapsDB.maps or {}
 
     -- The first mask experiment had one boundary toggle. Preserve its enabled
@@ -1127,9 +1377,12 @@ function Database:Initialize()
     if previousFovMaskSettingsVersion < 2 then
         BattleMapsDB.fovBoundaryMask = true
         BattleMapsDB.fovBeamMask = true
-        BattleMapsDB.fovAccentMask = true
     end
-    BattleMapsDB.fovMaskSettingsVersion = 2
+    -- Version 3 removes the retired proximity/accent FoV pass and its saved
+    -- toggle. Keep the SavedVariables table clean rather than carrying a setting
+    -- that can no longer affect rendering.
+    BattleMapsDB.fovAccentMask = nil
+    BattleMapsDB.fovMaskSettingsVersion = 3
 
     if BattleMapsDB.useGlobalPlayerPinSettings == nil then
         BattleMapsDB.useGlobalPlayerPinSettings = BattleMapsDB.useGlobalPinSettings ~= false
@@ -1240,7 +1493,6 @@ function Database:Initialize()
     BattleMapsDB.fovBoundaryPreview = BattleMapsDB.fovBoundaryPreview == true
     BattleMapsDB.fovBoundaryMask = BattleMapsDB.fovBoundaryMask == true
     BattleMapsDB.fovBeamMask = BattleMapsDB.fovBeamMask ~= false
-    BattleMapsDB.fovAccentMask = BattleMapsDB.fovAccentMask ~= false
     BattleMapsDB.worldMapPinScale = BattleMaps.Clamp(
         tonumber(BattleMapsDB.worldMapPinScale) or 1.00, 0.75, 2.00)
     BattleMapsDB.showFlagCarrierTrail = BattleMapsDB.showFlagCarrierTrail ~= false
@@ -1259,7 +1511,13 @@ function Database:Initialize()
         4,
         24
     ) + 0.5)
-    BattleMapsDB.factionColorEnemyKotmoguOrbs = BattleMapsDB.factionColorEnemyKotmoguOrbs ~= false
+    BattleMapsDB.carriedObjectiveColorMode = NormalizeCarriedObjectiveColorMode(
+        previousCarriedObjectiveColorMode,
+        previousKotmoguOrbColorMode,
+        previousKotmoguEnemyTint
+    )
+    BattleMapsDB.kotmoguOrbColorMode = nil
+    BattleMapsDB.factionColorEnemyKotmoguOrbs = nil
     BattleMapsDB.flashCarriedObjectives = BattleMapsDB.flashCarriedObjectives ~= false
     BattleMapsDB.carriedObjectiveFlashPeriod = BattleMaps.Clamp(
         tonumber(BattleMapsDB.carriedObjectiveFlashPeriod) or 0.70, 0.30, 2.00)
@@ -1353,8 +1611,10 @@ function Database:Initialize()
 
     BattleMapsDB.showPingPulses = false
     BattleMapsDB.hideMinimapInNonEpicBattlegrounds = BattleMapsDB.hideMinimapInNonEpicBattlegrounds == true
-    BattleMapsDB.elvuiBGLayoutEnabled = BattleMapsDB.elvuiBGLayoutEnabled == true
-    BattleMapsDB.elvuiBGLayoutMovePlayerAuras = BattleMapsDB.elvuiBGLayoutMovePlayerAuras == true
+    BattleMapsDB.bgLayoutMovePlayerAuras = BattleMapsDB.bgLayoutMovePlayerAuras == true
+    -- Keep the previous public key coherent for downgrade compatibility, but
+    -- never let it override the canonical value on startup.
+    BattleMapsDB.movePlayerAurasToMinimapArea = BattleMapsDB.bgLayoutMovePlayerAuras
     BattleMapsDB.stackTeamPins = BattleMapsDB.stackTeamPins ~= false
     BattleMapsDB.excludePlayerArrowFromStack = BattleMapsDB.excludePlayerArrowFromStack == true
     BattleMapsDB.fanOutTeamPinsOnHover = BattleMapsDB.fanOutTeamPinsOnHover ~= false
@@ -1362,9 +1622,9 @@ function Database:Initialize()
     BattleMapsDB.teamPinStackRadius = BattleMaps.Clamp(
         math.floor((tonumber(BattleMapsDB.teamPinStackRadius) or 18) + 0.5), 8, 40)
     BattleMapsDB.teamPinStackOverlap = BattleMaps.Clamp(
-        math.floor((tonumber(BattleMapsDB.teamPinStackOverlap) or 45) + 0.5), 0, 80)
-    BattleMapsDB.teamPinStackDirection = ({ compact = true, diagonal = true, horizontal = true, vertical = true })[BattleMapsDB.teamPinStackDirection]
-        and BattleMapsDB.teamPinStackDirection or "compact"
+        math.floor((tonumber(BattleMapsDB.teamPinStackOverlap) or 30) + 0.5), 0, 80)
+    -- Stacking now has one live/test presentation: the radial low-discrepancy spread.
+    BattleMapsDB.teamPinStackDirection = "compact"
 
     local notifications = type(BattleMapsDB.notifications) == "table" and BattleMapsDB.notifications or {}
     notifications.enabled = notifications.enabled ~= false
@@ -1383,6 +1643,17 @@ function Database:Initialize()
         LEFT = true,
         RIGHT = true,
     })[notifications.mapAnchorSide] and notifications.mapAnchorSide or "TOP"
+    notifications.notificationAnchorPoint = ({
+        AUTO = true,
+        TOP = true,
+        TOPLEFT = true,
+        TOPRIGHT = true,
+        BOTTOM = true,
+        BOTTOMLEFT = true,
+        BOTTOMRIGHT = true,
+        LEFT = true,
+        RIGHT = true,
+    })[notifications.notificationAnchorPoint] and notifications.notificationAnchorPoint or "AUTO"
     notifications.point = notifications.point or "TOP"
     notifications.relativePoint = notifications.relativePoint or notifications.point
     notifications.x = BattleMaps.Clamp(tonumber(notifications.x) or 0, -300, 300)
@@ -1442,7 +1713,13 @@ function Database:Initialize()
             4,
             24
         ) + 0.5)
-        config.objectives.factionColorEnemyKotmoguOrbs = config.objectives.factionColorEnemyKotmoguOrbs ~= false
+        config.objectives.carriedObjectiveColorMode = NormalizeCarriedObjectiveColorMode(
+            config.objectives.carriedObjectiveColorMode,
+            config.objectives.kotmoguOrbColorMode,
+            config.objectives.factionColorEnemyKotmoguOrbs
+        )
+        config.objectives.kotmoguOrbColorMode = nil
+        config.objectives.factionColorEnemyKotmoguOrbs = nil
         config.playerPins.combatTeamPinScale = 1
         config.playerPins.teamPinBorderScale = BattleMaps.Clamp(
             tonumber(config.playerPins.teamPinBorderScale) or PLAYER_PIN_DEFAULTS.teamPinBorderScale,
@@ -1479,9 +1756,8 @@ function Database:Initialize()
         config.playerPins.teamPinStackRadius = BattleMaps.Clamp(
             math.floor((tonumber(config.playerPins.teamPinStackRadius) or BattleMapsDB.teamPinStackRadius or 18) + 0.5), 8, 40)
         config.playerPins.teamPinStackOverlap = BattleMaps.Clamp(
-            math.floor((tonumber(config.playerPins.teamPinStackOverlap) or BattleMapsDB.teamPinStackOverlap or 45) + 0.5), 0, 80)
-        config.playerPins.teamPinStackDirection = ({ compact = true, diagonal = true, horizontal = true, vertical = true })[config.playerPins.teamPinStackDirection]
-            and config.playerPins.teamPinStackDirection or BattleMapsDB.teamPinStackDirection or "compact"
+            math.floor((tonumber(config.playerPins.teamPinStackOverlap) or BattleMapsDB.teamPinStackOverlap or 30) + 0.5), 0, 80)
+        config.playerPins.teamPinStackDirection = "compact"
         config.pins.combatTeamPinScale = config.playerPins.combatTeamPinScale
         config.pins.playerRadiusSize = nil
         BattleMapsDB.maps[info.id] = config
@@ -1844,7 +2120,13 @@ function Database:ResetFlags(mapID)
     target.carriedTrailDuration = source.carriedTrailDuration
     target.carriedTrailDotScale = source.carriedTrailDotScale
     target.carriedTrailDetail = source.carriedTrailDetail
-    target.factionColorEnemyKotmoguOrbs = source.factionColorEnemyKotmoguOrbs
+    target.carriedObjectiveColorMode = NormalizeCarriedObjectiveColorMode(
+        source.carriedObjectiveColorMode,
+        source.kotmoguOrbColorMode,
+        source.factionColorEnemyKotmoguOrbs
+    )
+    target.kotmoguOrbColorMode = nil
+    target.factionColorEnemyKotmoguOrbs = nil
     target.flashCarriedObjectives = source.flashCarriedObjectives
     target.carriedObjectiveFlashPeriod = source.carriedObjectiveFlashPeriod
     target.carriedObjectiveFlashStrength = source.carriedObjectiveFlashStrength

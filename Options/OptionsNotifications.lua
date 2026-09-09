@@ -39,8 +39,8 @@ function Options:CreateNotificationsPage(parent)
     end)
     resetNotifications:SetPoint("TOPRIGHT", page, "TOPRIGHT", -4, -2)
 
-    local main = MakePanel(page, "Battleground notifications", 0, -34, 684, 136)
-    self.notificationEnabledCheck = MakeCheckbox(main, "Manage Blizzard battleground and raid-warning notifications", 10, -30,
+    local main = MakePanel(page, "Battleground notifications", 0, -34, 684, 108)
+    self.notificationEnabledCheck = MakeCheckbox(main, "Enable BattleMaps battleground notification handling", 10, -30,
         function() return Settings().enabled end,
         function(value)
             Settings().enabled = value
@@ -59,15 +59,9 @@ function Options:CreateNotificationsPage(parent)
         end)
     AddControlTooltip(self.notificationWorldMapBlizzardCheck,
         "Full-screen map notification ownership",
-        "When enabled, opening the full-screen World Map restores Blizzard's native notification position, style, and filtering. Disable this to keep BattleMaps notification handling active while the full-screen map is open.")
+        "When enabled, opening the full-screen World Map restores Blizzard's native raid-warning position. Disable this to keep BattleMaps placement active while the full-screen map is open.")
 
-    local description = main:CreateFontString(nil, "ARTWORK", "GameFontDisableSmall")
-    description:SetPoint("TOPLEFT", main, "TOPLEFT", 14, -110)
-    description:SetPoint("TOPRIGHT", main, "TOPRIGHT", -14, -110)
-    description:SetJustifyH("LEFT")
-    description:SetText("Controls RaidBossEmoteFrame and RaidWarningFrame; disabling restores Blizzard's captured settings.")
-
-    local placement = MakePanel(page, "Placement", 0, -176, 684, 170)
+    local placement = MakePanel(page, "Placement", 0, -148, 684, 170)
     self.notificationAnchorMode = MakeDropdown(placement, "Position mode", 12, -30, 250, {
         { value = "INDEPENDENT", label = "Screen" },
         { value = "MAP", label = "Attach to map" },
@@ -89,6 +83,8 @@ function Options:CreateNotificationsPage(parent)
         Settings().mapAnchorSide = value
         BattleMaps.Notifications:ApplyAndShowGuide()
     end, true)
+    AddControlTooltip(self.notificationMapSide, "Map attachment",
+        "Chooses the point on the BattleMaps frame that the notification area attaches to.")
 
     self.notificationAlignment = MakeChoiceSelector(placement, "Text alignment", 12, -78, {
         { value = "LEFT", label = "Left" },
@@ -98,6 +94,25 @@ function Options:CreateNotificationsPage(parent)
         Settings().justifyH = value
         BattleMaps.Notifications:ApplyAndShowGuide()
     end, 82)
+    AddControlTooltip(self.notificationAlignment, "Text alignment",
+        "Align BattleMaps battleground notifications to the left, centre, or right within the configured text area. This does not change the attachment point.")
+
+    self.notificationAttachSide = MakeDropdown(placement, "Notification attachment", 342, -78, 250, {
+        { value = "AUTO", label = "Automatic" },
+        { value = "TOP", label = "Top centre" },
+        { value = "TOPLEFT", label = "Top left" },
+        { value = "TOPRIGHT", label = "Top right" },
+        { value = "BOTTOM", label = "Bottom centre" },
+        { value = "BOTTOMLEFT", label = "Bottom left" },
+        { value = "BOTTOMRIGHT", label = "Bottom right" },
+        { value = "LEFT", label = "Left side" },
+        { value = "RIGHT", label = "Right side" },
+    }, function() return Settings().notificationAnchorPoint or "AUTO" end, function(value)
+        Settings().notificationAnchorPoint = value
+        BattleMaps.Notifications:ApplyAndShowGuide()
+    end, true)
+    AddControlTooltip(self.notificationAttachSide, "Notification attachment",
+        "Chooses which edge or corner of the notification area joins the selected map attachment point. Automatic chooses the natural outside-facing edge.")
 
     self.notificationX = MakeSlider(placement, "Horizontal offset", 12, -120, -300, 300, 1,
         function() local settings = Settings(); return settings.anchorMode == "MAP" and settings.mapX or settings.x end,
@@ -114,7 +129,7 @@ function Options:CreateNotificationsPage(parent)
         end,
         function(value) return string.format("%d px", value) end)
 
-    local appearance = MakePanel(page, "Appearance", 0, -352, 684, 128)
+    local appearance = MakePanel(page, "Appearance", 0, -324, 684, 128)
     self.notificationScale = MakeSlider(appearance, "Notification scale", 12, -34, 0.50, 2.00, 0.05,
         function() return tonumber(Settings().scale) or 1 end,
         function(value)
@@ -129,6 +144,8 @@ function Options:CreateNotificationsPage(parent)
             BattleMaps.Notifications:ApplyAndShowGuide()
         end,
         function(value) return string.format("%d px", value) end)
+    AddControlTooltip(self.notificationWidth, "Text area width",
+        "Sets the width of BattleMaps' battleground notification text area. Narrower widths wrap long announcements sooner.")
 
     local move = MakeButton(appearance, "Move Notifications", 142)
     self.notificationMoveButton = move
@@ -139,6 +156,7 @@ function Options:CreateNotificationsPage(parent)
     end)
 
     local preview = MakeButton(appearance, "Preview", 90)
+    self.notificationPreviewButton = preview
     preview:SetPoint("LEFT", move, "RIGHT", 8, 0)
     preview:SetScript("OnClick", function() BattleMaps.Notifications:Preview() end)
 

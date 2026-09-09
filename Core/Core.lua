@@ -2,8 +2,8 @@ local addonName, BattleMaps = ...
 
 _G.BattleMaps = BattleMaps
 BattleMaps.addonName = addonName
-BattleMaps.VERSION = "2.7.8"
-BattleMaps.BUILD = "2.7.8-fov-live-adaptive-mask"
+BattleMaps.VERSION = "3.0.8"
+BattleMaps.BUILD = "3.0.8"
 
 BattleMaps.COLORS = {
     red = { 0.77, 0.17, 0.16 },
@@ -697,15 +697,43 @@ local function GetMinimapHideTargets()
         end
     end
 
-    -- Do not call Hide()/Show() on the Blizzard minimap frames. The modern
-    -- Blizzard_Minimap module keeps child event frames alive for mail/tracking/
-    -- queue-count updates and some of those handlers assume the minimap cluster
-    -- remains in its normal shown/layout state. BattleMaps therefore makes the
-    -- minimap visually absent with alpha/mouse changes instead of firing OnHide.
-    -- This still hides ElvUI/minimap-button children through inherited alpha.
+    -- Hide the complete minimap surface. No minimap children are reparented:
+    -- native pins and addon buttons disappear through ordinary parent visibility.
     Add(_G.MinimapCluster)
     Add(_G.Minimap)
     return targets
+end
+
+-- Blizzard's MailFrame and CraftingOrderFrame call self:GetParent():Layout()
+-- from their own event handlers. Some minimap replacements (including layouts
+-- used by ElvUI) can move those indicators to a plain/hidden holder that has no
+-- Layout method. Do not move the Blizzard frames again; instead give only such
+-- parent holders the no-op layout contract Blizzard expects. This is the same
+-- compatibility pattern used by established minimap addons after reparenting
+-- these indicators.
+local function EnsureMinimapIndicatorParentLayout()
+    local cluster = _G.MinimapCluster
+    local indicatorFrame = cluster and cluster.IndicatorFrame
+    if not BattleMaps.IsFrame(indicatorFrame) then return end
+
+    local candidates = {
+        indicatorFrame.MailFrame,
+        indicatorFrame.CraftingOrderFrame,
+    }
+
+    for _, frame in ipairs(candidates) do
+        if BattleMaps.IsFrame(frame) and type(frame.GetParent) == "function" then
+            local okParent, parent = pcall(frame.GetParent, frame)
+            if okParent and BattleMaps.IsFrame(parent) and parent ~= indicatorFrame
+                and type(parent.Layout) ~= "function" then
+                -- UI frames support addon-owned Lua fields. A plain hidden/mover
+                -- parent has no layout work to perform, but Blizzard requires the
+                -- method to exist when mail/crafting events fire.
+                parent.Layout = function() end
+                parent.BattleMapsMinimapLayoutShim = true
+            end
+        end
+    end
 end
 
 local function SetFrameMouseEnabled(frame, enabled)
@@ -723,10 +751,25 @@ function BattleMaps.SetMinimapHiddenByBattleMaps(hidden)
     end
 
     if hidden then
-        if BattleMaps.minimapHiddenByBattleMaps then return true end
-
         local targets = GetMinimapHideTargets()
         if #targets == 0 then return false end
+
+        -- Do not reparent addon minimap buttons. Hiding MinimapCluster naturally
+        -- hides them with the rest of the minimap and avoids ownership conflicts
+        -- with ElvUI/LibDBIcon. Supply the Layout contract required by Blizzard
+        -- if another minimap implementation has already moved its indicators.
+        EnsureMinimapIndicatorParentLayout()
+
+        if BattleMaps.minimapHiddenByBattleMaps then
+            -- Another UI addon may have shown the minimap again during a zone/UI
+            -- refresh. Reassert visibility without replacing the original state.
+            for _, frame in ipairs(targets) do
+                if type(frame.SetAlpha) == "function" then pcall(frame.SetAlpha, frame, 0) end
+                SetFrameMouseEnabled(frame, false)
+                if type(frame.Hide) == "function" then pcall(frame.Hide, frame) end
+            end
+            return true
+        end
 
         local states = {}
         for _, frame in ipairs(targets) do
@@ -735,11 +778,22 @@ function BattleMaps.SetMinimapHiddenByBattleMaps(hidden)
                 mouseEnabled = type(frame.IsMouseEnabled) == "function" and frame:IsMouseEnabled() == true or false,
             }
             states[frame] = state
+
             if type(frame.SetAlpha) == "function" then
                 pcall(frame.SetAlpha, frame, 0)
             end
             SetFrameMouseEnabled(frame, false)
+
+            -- Native/engine minimap pins are not reliably enumerable as Lua
+            -- descendants. Hide the actual minimap/cluster instead of trying to
+            -- walk or reparent their children. Visibility hides ignore-parent-
+            -- alpha regions as well.
+            if type(frame.Hide) == "function" then
+                state.shown = type(frame.IsShown) == "function" and frame:IsShown() == true or false
+                pcall(frame.Hide, frame)
+            end
         end
+
         BattleMaps.minimapHiddenFrameStates = states
         BattleMaps.minimapHiddenByBattleMaps = true
         return true
@@ -749,19 +803,17 @@ function BattleMaps.SetMinimapHiddenByBattleMaps(hidden)
 
     local states = BattleMaps.minimapHiddenFrameStates or {}
     for frame, state in pairs(states) do
-        if BattleMaps.IsFrame(frame) then
-            if type(state) == "table" then
-                if type(frame.SetAlpha) == "function" then
-                    pcall(frame.SetAlpha, frame, tonumber(state.alpha) or 1)
-                end
-                SetFrameMouseEnabled(frame, state.mouseEnabled == true)
-            elseif state == true and type(frame.Show) == "function" then
-                -- Compatibility with the earlier Hide()/Show()-based state if a
-                -- user hot-swaps files without a full reload.
+        if BattleMaps.IsFrame(frame) and type(state) == "table" then
+            if type(frame.SetAlpha) == "function" then
+                pcall(frame.SetAlpha, frame, tonumber(state.alpha) or 1)
+            end
+            SetFrameMouseEnabled(frame, state.mouseEnabled == true)
+            if state.shown == true and type(frame.Show) == "function" then
                 pcall(frame.Show, frame)
             end
         end
     end
+
     BattleMaps.minimapHiddenFrameStates = nil
     BattleMaps.minimapHiddenByBattleMaps = false
     return true
@@ -769,7 +821,11 @@ end
 
 function BattleMaps.ApplyMinimapVisibility()
     BattleMaps.pendingMinimapVisibilityRefresh = nil
-    return BattleMaps.SetMinimapHiddenByBattleMaps(BattleMaps.ShouldHideMinimapNow())
+    local result = BattleMaps.SetMinimapHiddenByBattleMaps(BattleMaps.ShouldHideMinimapNow())
+    if BattleMaps.ApplyBattlegroundAuraLayout then
+        BattleMaps.ApplyBattlegroundAuraLayout()
+    end
+    return result
 end
 
 function BattleMaps.ResolveCurrentBattlegroundMapID()
@@ -1142,16 +1198,15 @@ SlashCmdList.BATTLEMAPS = function(message)
         elseif state == "off" or state == "disable" or state == "disabled" then
             enabled = false
         elseif state ~= "" and state ~= "toggle" then
-            BattleMaps.Chat("Usage: /bmap fovmask [all|boundary|beam|accent] [on|off].")
+            BattleMaps.Chat("Usage: /bmap fovmask [all|core|terrain] [on|off].")
             return
         end
 
-        local boundary = target == "boundary" or target == "cone"
-        local beam = target == "beam" or target == "core" or target == "detail"
-        local accent = target == "accent" or target == "arc"
+        local boundary = target == "core" or target == "boundary" or target == "cone"
+        local beam = target == "terrain" or target == "beam" or target == "detail"
         local all = target == "" or target == "all"
-        if not boundary and not beam and not accent and not all then
-            BattleMaps.Chat("Usage: /bmap fovmask [all|boundary|beam|accent] [on|off].")
+        if not boundary and not beam and not all then
+            BattleMaps.Chat("Usage: /bmap fovmask [all|core|terrain] [on|off].")
             return
         end
         if all or boundary then
@@ -1160,9 +1215,6 @@ SlashCmdList.BATTLEMAPS = function(message)
         if all or beam then
             db.fovBeamMask = enabled ~= nil and enabled or not (db.fovBeamMask ~= false)
         end
-        if all or accent then
-            db.fovAccentMask = enabled ~= nil and enabled or not (db.fovAccentMask ~= false)
-        end
         if BattleMaps.Pins then BattleMaps.Pins:RefreshGroup() end
         local mapID = BattleMaps.ResolveCurrentBattlegroundMapID()
             or (BattleMaps.MapFrame and BattleMaps.MapFrame.currentMapID)
@@ -1170,11 +1222,10 @@ SlashCmdList.BATTLEMAPS = function(message)
         local mapName = BattleMaps.Battlegrounds and BattleMaps.Battlegrounds:GetName(mapID)
             or "Current map"
         BattleMaps.Chat(string.format(
-            "%s FoV masks: boundary %s, beam %s, accent %s.",
+            "%s FoV masks: core %s, terrain %s.",
             mapName,
             db.fovBoundaryMask and "on" or "off",
-            db.fovBeamMask ~= false and "on" or "off",
-            db.fovAccentMask ~= false and "on" or "off"
+            db.fovBeamMask ~= false and "on" or "off"
         ))
     elseif message == "show" or message == "map" then
         BattleMaps.MapFrame:ShowCurrentOrSelected()
@@ -1182,9 +1233,9 @@ SlashCmdList.BATTLEMAPS = function(message)
         BattleMaps.MapFrame:Hide()
     elseif message == "toggle" then
         BattleMaps.MapFrame:Toggle()
-    elseif message == "save" then
+    elseif message == "save" or message == "lock" then
         BattleMaps.MapFrame:CommitEdit()
-    elseif message == "lock" or message == "cancel" then
+    elseif message == "cancel" then
         BattleMaps.MapFrame:CancelEdit()
     elseif message == "unlock" or message == "edit" then
         BattleMaps.MapFrame:ShowCurrentOrSelected()
@@ -1225,6 +1276,18 @@ SlashCmdList.BATTLEMAPS = function(message)
     elseif message == "stackcheck" or message == "stackingcheck" then
         if BattleMaps.Pins and BattleMaps.Pins.PrintTeamStackDebug then
             BattleMaps.Pins:PrintTeamStackDebug()
+        end
+    elseif message == "healercheck" or message == "healerdiag" then
+        if BattleMaps.Pins and BattleMaps.Pins.PrintHealerDebug then
+            BattleMaps.Pins:PrintHealerDebug()
+        else
+            BattleMaps.Chat("Healer diagnostics are unavailable.")
+        end
+    elseif message == "carriercheck" or message == "elvcarriercheck" or message == "classificationcheck" then
+        if BattleMaps.PrintElvUIPvPClassificationStatus then
+            BattleMaps.PrintElvUIPvPClassificationStatus()
+        else
+            BattleMaps.Chat("ElvUI PvP classification diagnostics are unavailable.")
         end
     elseif message == "fovdiag" or message == "fovcheck" then
         if BattleMaps.Pins and BattleMaps.Pins.PrintFovDiagnostics then
@@ -1273,6 +1336,13 @@ local Notifications = {
     nativeStates = {},
     recentFactionByMessage = {},
     recentClassByPlayerName = {},
+    -- WoW 12.x taint-hardening: BattleMaps may reposition/scale the native
+    -- RaidWarningFrame, but it deliberately does not inspect or mutate its
+    -- pooled FontStrings and never replaces RaidNotice_AddMessage.
+    nativeFramePlacementEnabled = true,
+    nativeTextStylingEnabled = false,
+    customPresentationEnabled = true,
+    displaySerial = 0,
 }
 BattleMaps.Notifications = Notifications
 
@@ -1398,16 +1468,17 @@ function Notifications:InstallChatFilters()
 end
 
 function Notifications:GetManagedFrames()
+    -- Retail 12.1 routes standard raid warnings, battleground-system notices,
+    -- and boss-emote messages through the single global RaidWarningFrame.
+    -- Private boss-emote text is anchored to it by Blizzard, so moving this
+    -- outer frame is sufficient and avoids touching any private/text objects.
     local frames = {}
     if _G.RaidWarningFrame then frames[#frames + 1] = _G.RaidWarningFrame end
-    if _G.RaidBossEmoteFrame and _G.RaidBossEmoteFrame ~= _G.RaidWarningFrame then
-        frames[#frames + 1] = _G.RaidBossEmoteFrame
-    end
     return frames
 end
 
 function Notifications:IsManagedFrame(frame)
-    return frame and (frame == _G.RaidWarningFrame or frame == _G.RaidBossEmoteFrame)
+    return frame and frame == _G.RaidWarningFrame
 end
 
 function Notifications:CaptureNativeState(frame)
@@ -1416,10 +1487,6 @@ function Notifications:CaptureNativeState(frame)
     local state = {
         points = {},
         scale = frame.GetScale and frame:GetScale() or 1,
-        width = frame.GetWidth and frame:GetWidth() or nil,
-        height = frame.GetHeight and frame:GetHeight() or nil,
-        justifyH = frame.GetJustifyH and frame:GetJustifyH() or nil,
-        layoutObjects = {},
     }
 
     local pointCount = frame.GetNumPoints and frame:GetNumPoints() or 0
@@ -1433,35 +1500,6 @@ function Notifications:CaptureNativeState(frame)
             y = y,
         }
     end
-
-    local visited = {}
-    local function CaptureLayout(owner)
-        if not owner or visited[owner] then return end
-        visited[owner] = true
-
-        local objectType = owner.GetObjectType and owner:GetObjectType() or nil
-        local r, g, b, a
-        if objectType == "FontString" and owner.GetTextColor then
-            r, g, b, a = owner:GetTextColor()
-        end
-        state.layoutObjects[#state.layoutObjects + 1] = {
-            object = owner,
-            width = owner.GetWidth and owner:GetWidth() or nil,
-            justifyH = owner.GetJustifyH and owner:GetJustifyH() or nil,
-            textR = r,
-            textG = g,
-            textB = b,
-            textA = a,
-        }
-
-        if owner.GetRegions then
-            for _, region in ipairs({ owner:GetRegions() }) do CaptureLayout(region) end
-        end
-        if owner.GetChildren then
-            for _, child in ipairs({ owner:GetChildren() }) do CaptureLayout(child) end
-        end
-    end
-    CaptureLayout(frame)
 
     self.nativeStates[frame] = state
 end
@@ -1485,34 +1523,13 @@ function Notifications:RestoreNativeState(frame)
         end
     end
 
-    if state.scale and frame.SetScale then pcall(frame.SetScale, frame, state.scale) end
-    if state.width and frame.SetWidth then pcall(frame.SetWidth, frame, state.width) end
-    if state.height and frame.SetHeight then pcall(frame.SetHeight, frame, state.height) end
-    if state.justifyH and frame.SetJustifyH then pcall(frame.SetJustifyH, frame, state.justifyH) end
-
-    for _, layoutState in ipairs(state.layoutObjects or {}) do
-        local object = layoutState.object
-        if object then
-            if layoutState.width and object.SetWidth then pcall(object.SetWidth, object, layoutState.width) end
-            if layoutState.justifyH and object.SetJustifyH then
-                pcall(object.SetJustifyH, object, layoutState.justifyH)
-            end
-            if layoutState.textR and object.SetTextColor then
-                pcall(
-                    object.SetTextColor,
-                    object,
-                    layoutState.textR,
-                    layoutState.textG or 1,
-                    layoutState.textB or 1,
-                    layoutState.textA or 1
-                )
-            end
-        end
+    if state.scale and frame.SetScale then
+        pcall(frame.SetScale, frame, state.scale)
     end
 
     -- Capture a fresh baseline the next time BattleMaps enters a supported
-    -- battleground, allowing Blizzard or another addon to change the native
-    -- raid-warning layout while BattleMaps is inactive.
+    -- battleground, allowing Blizzard/Edit Mode/another addon to change the
+    -- warning position while BattleMaps is inactive.
     self.nativeStates[frame] = nil
 end
 
@@ -1524,37 +1541,43 @@ function Notifications:GetMapAnchorDefaults(side)
     return 0, 28
 end
 
-function Notifications:GetMapAttachment(side, justifyH)
-    side = ({
+function Notifications:GetDefaultNotificationAnchorPoint(mapSide)
+    if mapSide == "BOTTOM" then return "TOP" end
+    if mapSide == "LEFT" then return "RIGHT" end
+    if mapSide == "RIGHT" then return "LEFT" end
+    if mapSide == "TOPLEFT" then return "TOPRIGHT" end
+    if mapSide == "TOPRIGHT" then return "TOPLEFT" end
+    return "BOTTOM"
+end
+
+function Notifications:GetMapAttachment(mapSide, notificationAnchorPoint)
+    mapSide = ({
         TOP = true,
         TOPLEFT = true,
         TOPRIGHT = true,
         BOTTOM = true,
         LEFT = true,
         RIGHT = true,
-    })[side] and side or "TOP"
-    justifyH = (justifyH == "LEFT" or justifyH == "RIGHT") and justifyH or "CENTER"
+    })[mapSide] and mapSide or "TOP"
 
-    if side == "TOPLEFT" then
-        -- Place the notification container beside the map: its top-right
-        -- corner meets the map's top-left corner.
-        return "TOPRIGHT", "TOPLEFT"
-    elseif side == "TOPRIGHT" then
-        -- Mirror the left-side attachment on the opposite map corner.
-        return "TOPLEFT", "TOPRIGHT"
-    elseif side == "TOP" then
-        if justifyH == "LEFT" then return "BOTTOMLEFT", "TOPLEFT" end
-        if justifyH == "RIGHT" then return "BOTTOMRIGHT", "TOPRIGHT" end
-        return "BOTTOM", "TOP"
-    elseif side == "BOTTOM" then
-        if justifyH == "LEFT" then return "TOPLEFT", "BOTTOMLEFT" end
-        if justifyH == "RIGHT" then return "TOPRIGHT", "BOTTOMRIGHT" end
-        return "TOP", "BOTTOM"
-    elseif side == "LEFT" then
-        return justifyH, "LEFT"
+    local validNotificationPoints = {
+        TOP = true,
+        TOPLEFT = true,
+        TOPRIGHT = true,
+        BOTTOM = true,
+        BOTTOMLEFT = true,
+        BOTTOMRIGHT = true,
+        LEFT = true,
+        RIGHT = true,
+    }
+    if notificationAnchorPoint == "AUTO" or not validNotificationPoints[notificationAnchorPoint] then
+        notificationAnchorPoint = self:GetDefaultNotificationAnchorPoint(mapSide)
     end
 
-    return justifyH, "RIGHT"
+    -- mapSide names the point on BattleMaps. notificationAnchorPoint names the
+    -- independent point on the notification rectangle that joins it. Text
+    -- justification is deliberately not involved in this geometry.
+    return notificationAnchorPoint, mapSide
 end
 
 function Notifications:GetFramePointCoordinates(frame, point)
@@ -1703,6 +1726,18 @@ function Notifications:IsFlagObjectiveMessage(message)
         or text:find("dropped", 1, true) ~= nil
         or text:find("captured", 1, true) ~= nil
         or text:find("returned", 1, true) ~= nil
+end
+
+function Notifications:IsEotSFlagPickupMessage(message)
+    local mapID = BattleMaps.ResolveCurrentBattlegroundMapID()
+        or (BattleMaps.MapFrame and BattleMaps.MapFrame.currentMapID)
+    if tonumber(mapID) ~= 210 then return false end
+
+    local text = NormalizeNotificationText(message)
+    if text == "" or not text:find("flag", 1, true) then return false end
+    return text:find("picked up", 1, true) ~= nil
+        or text:find("taken", 1, true) ~= nil
+        or text:find("grabbed", 1, true) ~= nil
 end
 
 function Notifications:BuildFlagNotificationText(message)
@@ -1956,6 +1991,166 @@ function Notifications:ColorMatchingText(owner, message, faction, visited)
     end
 end
 
+
+function Notifications:EnsureDisplayFrame()
+    if self.displayFrame then return self.displayFrame end
+
+    local frame = CreateFrame("Frame", "BattleMapsNotificationDisplay", UIParent)
+    self.displayFrame = frame
+    frame:SetFrameStrata("DIALOG")
+    frame:EnableMouse(false)
+    frame:Hide()
+
+    local text = frame:CreateFontString(nil, "OVERLAY", "GameFontNormalHuge")
+    frame.text = text
+    text:SetPoint("TOPLEFT", frame, "TOPLEFT", 0, 0)
+    text:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", 0, 0)
+    text:SetJustifyV("MIDDLE")
+    text:SetWordWrap(true)
+
+    return frame
+end
+
+function Notifications:ApplyDisplayLayout()
+    local settings = GetNotificationSettings()
+    if not settings then return end
+
+    local mover = self:EnsureMover()
+    self:AnchorMover()
+    local frame = self:EnsureDisplayFrame()
+    local width = BattleMaps.Clamp(tonumber(settings.width) or 520, 240, 900)
+    local scale = BattleMaps.Clamp(tonumber(settings.scale) or 1, 0.50, 2.00)
+    local justifyH = (settings.justifyH == "LEFT" or settings.justifyH == "RIGHT")
+        and settings.justifyH or "CENTER"
+
+    frame:SetScale(scale)
+    frame:SetSize(width, 70)
+    frame:ClearAllPoints()
+    frame:SetPoint("CENTER", mover, "CENTER", 0, 0)
+    if frame.text then
+        frame.text:SetJustifyH(justifyH)
+    end
+end
+
+function Notifications:SuppressNativeForDisplay(duration)
+    local frame = _G.RaidWarningFrame
+    if not frame or not frame.GetAlpha or not frame.SetAlpha then return end
+
+    if self.nativeDisplayAlpha == nil then
+        local ok, alpha = pcall(frame.GetAlpha, frame)
+        self.nativeDisplayAlpha = ok and alpha or 1
+    end
+    pcall(frame.SetAlpha, frame, 0)
+
+    self.nativeSuppressSerial = (self.nativeSuppressSerial or 0) + 1
+    local serial = self.nativeSuppressSerial
+    if C_Timer and C_Timer.After then
+        C_Timer.After(tonumber(duration) or 3.2, function()
+            if Notifications.nativeSuppressSerial ~= serial then return end
+            local native = _G.RaidWarningFrame
+            if native and native.SetAlpha then
+                pcall(native.SetAlpha, native, Notifications.nativeDisplayAlpha or 1)
+            end
+            Notifications.nativeDisplayAlpha = nil
+        end)
+    end
+end
+
+function Notifications:RestoreNativeDisplayAlpha()
+    self.nativeSuppressSerial = (self.nativeSuppressSerial or 0) + 1
+    local frame = _G.RaidWarningFrame
+    if frame and frame.SetAlpha and self.nativeDisplayAlpha ~= nil then
+        pcall(frame.SetAlpha, frame, self.nativeDisplayAlpha or 1)
+    end
+    self.nativeDisplayAlpha = nil
+end
+
+function Notifications:GetBattlegroundMessageFaction(event, message)
+    local faction
+    if event == "CHAT_MSG_BG_SYSTEM_ALLIANCE" then
+        faction = "ALLIANCE"
+    elseif event == "CHAT_MSG_BG_SYSTEM_HORDE" then
+        faction = "HORDE"
+    end
+
+    -- In CTF battlegrounds Blizzard can route a flag notice through the flag's
+    -- faction channel rather than the acting team's faction. For action text
+    -- such as "The Alliance Flag was picked up...", the team performing the
+    -- action is necessarily the opposite faction. Derive that colour from the
+    -- named flag object instead of trusting the event channel.
+    local mapID = (BattleMaps.ResolveCurrentBattlegroundMapID
+            and BattleMaps.ResolveCurrentBattlegroundMapID())
+        or (BattleMaps.MapFrame and BattleMaps.MapFrame.currentMapID)
+    local isCTF = BattleMaps.Pins and BattleMaps.Pins.Private
+        and BattleMaps.Pins.Private.IsCaptureTheFlagMap
+        and BattleMaps.Pins.Private.IsCaptureTheFlagMap(mapID)
+    if not isCTF then return faction end
+
+    local text = NormalizeNotificationText(message)
+    if text == "" or not text:find("flag", 1, true) then return faction end
+
+    local flagFaction
+    if text:find("alliance flag", 1, true) then
+        flagFaction = "ALLIANCE"
+    elseif text:find("horde flag", 1, true) then
+        flagFaction = "HORDE"
+    end
+    if not flagFaction then return faction end
+
+    local opposingAction = text:find("picked up", 1, true)
+        or text:find("taken", 1, true)
+        or text:find("grabbed", 1, true)
+        or text:find("dropped", 1, true)
+        or text:find("captured", 1, true)
+    if opposingAction then
+        return flagFaction == "ALLIANCE" and "HORDE" or "ALLIANCE"
+    end
+
+    local owningAction = text:find("returned", 1, true)
+        or text:find("reset", 1, true)
+        or text:find("recovered", 1, true)
+    if owningAction then
+        return flagFaction
+    end
+
+    return faction
+end
+
+function Notifications:ShowBattlegroundMessage(event, message)
+    local settings = GetNotificationSettings()
+    if self.customPresentationEnabled ~= true or not settings or settings.enabled ~= true then return end
+    if not self:ShouldManage() then return end
+    if self:IsRedundantCrystalNotification(message) then return end
+
+    if message == nil then return end
+
+    self:ApplyDisplayLayout()
+    local frame = self:EnsureDisplayFrame()
+    local r, g, b = self:GetDefaultNotificationTextColor()
+    if settings.colorByFaction ~= false then
+        local messageFaction = self:GetBattlegroundMessageFaction(event, message)
+        if messageFaction then
+            r, g, b = self:GetFactionColor(messageFaction)
+        end
+    end
+
+    local ok = pcall(frame.text.SetText, frame.text, message)
+    if not ok then return end
+    frame.text:SetTextColor(r or 1, g or 0.82, b or 0, 1)
+    frame:Show()
+    frame:Raise()
+    self:SuppressNativeForDisplay(3.2)
+
+    self.displaySerial = (self.displaySerial or 0) + 1
+    local serial = self.displaySerial
+    if C_Timer and C_Timer.After then
+        C_Timer.After(3.2, function()
+            if Notifications.displaySerial ~= serial then return end
+            if Notifications.displayFrame then Notifications.displayFrame:Hide() end
+        end)
+    end
+end
+
 function Notifications:EnsureMover()
     if self.mover then return self.mover end
 
@@ -2027,7 +2222,8 @@ function Notifications:ShowGuide(duration)
 
     local guide = self:EnsureGuide()
     guide:ClearAllPoints()
-    guide:SetAllPoints(mover)
+    guide:SetSize(mover:GetWidth(), mover:GetHeight())
+    guide:SetPoint("CENTER", mover, "CENTER", 0, 0)
     guide:Show()
     guide:Raise()
 
@@ -2043,6 +2239,11 @@ function Notifications:ShowGuide(duration)
 end
 
 function Notifications:ApplyAndShowGuide(duration)
+    if self.nativeFramePlacementEnabled ~= true then
+        self.previewOverride = false
+        self:Apply()
+        return
+    end
     self.previewOverride = true
     self:Apply()
     self:ShowGuide(duration)
@@ -2063,15 +2264,21 @@ function Notifications:AnchorMover()
     if not settings then return end
 
     local mover = self:EnsureMover()
+    -- The mover/guide should represent the actual BattleMaps notification
+    -- text region, not Blizzard's much wider RaidWarningFrame.  The custom
+    -- display frame uses settings.width before applying notification scale,
+    -- so mirror its final on-screen footprint here.
     local width = BattleMaps.Clamp(tonumber(settings.width) or 520, 240, 900)
     local scale = BattleMaps.Clamp(tonumber(settings.scale) or 1, 0.50, 2.00)
-    mover:SetSize(math.max(120, width * scale), math.max(44, 44 * scale))
+    -- Match the exact final on-screen footprint of BattleMapsNotificationDisplay:
+    -- the display frame is width x 70 before scale is applied.
+    mover:SetSize(math.max(120, width * scale), math.max(44, 70 * scale))
     mover:ClearAllPoints()
 
     if settings.anchorMode == "MAP" and BattleMaps.MapFrame and BattleMaps.MapFrame.frame then
         local side = settings.mapAnchorSide
         local defaultX, defaultY = self:GetMapAnchorDefaults(side)
-        local moverPoint, mapPoint = self:GetMapAttachment(side, settings.justifyH)
+        local moverPoint, mapPoint = self:GetMapAttachment(side, settings.notificationAnchorPoint)
         mover:SetClampedToScreen(false)
         mover:SetPoint(
             moverPoint,
@@ -2099,7 +2306,7 @@ function Notifications:CaptureMoverPosition()
 
     if settings.anchorMode == "MAP" and BattleMaps.MapFrame and BattleMaps.MapFrame.frame then
         local side = settings.mapAnchorSide
-        local moverPoint, mapPoint = self:GetMapAttachment(side, settings.justifyH)
+        local moverPoint, mapPoint = self:GetMapAttachment(side, settings.notificationAnchorPoint)
         local moverX, moverY = self:GetFramePointCoordinates(mover, moverPoint)
         local mapX, mapY = self:GetFramePointCoordinates(BattleMaps.MapFrame.frame, mapPoint)
         if moverX and moverY and mapX and mapY then
@@ -2116,23 +2323,23 @@ function Notifications:CaptureMoverPosition()
 end
 
 function Notifications:ApplyFrame(frame)
+    if self.nativeFramePlacementEnabled ~= true then return false end
     local settings = GetNotificationSettings()
     if not frame or not settings or not self:ShouldManage() then return false end
 
+    -- Placement-only mode intentionally touches only the outer frame. The
+    -- current Blizzard RaidWarningFrame owns pooled FontStrings whose line
+    -- counts can become secret in instanced PvP. Do not change their width,
+    -- justification, colour, text, scripts, or pool state here.
     self:CaptureNativeState(frame)
     local mover = self:EnsureMover()
-    local width = BattleMaps.Clamp(tonumber(settings.width) or 520, 240, 900)
     local scale = BattleMaps.Clamp(tonumber(settings.scale) or 1, 0.50, 2.00)
-    local justifyH = (settings.justifyH == "LEFT" or settings.justifyH == "RIGHT")
-        and settings.justifyH or "CENTER"
 
     if frame.SetScale then pcall(frame.SetScale, frame, scale) end
-    if frame.SetWidth then pcall(frame.SetWidth, frame, width) end
     if frame.ClearAllPoints and frame.SetPoint then
         pcall(frame.ClearAllPoints, frame)
         pcall(frame.SetPoint, frame, "CENTER", mover, "CENTER", 0, 0)
     end
-    self:ApplyTextLayout(frame, justifyH, width)
     return true
 end
 
@@ -2165,6 +2372,7 @@ function Notifications:RecordObjectiveStateFromRaidNotice(message)
 end
 
 function Notifications:HandleRaidNoticeMessage(frame, message, colorInfo)
+    if self.nativeTextStylingEnabled ~= true then return end
     if not self:IsManagedFrame(frame) then return end
     if not self:ShouldManage() then return end
 
@@ -2188,6 +2396,19 @@ function Notifications:HandleRaidNoticeMessage(frame, message, colorInfo)
         -- crystal notifications here; let Blizzard's text stand unchanged.
         if self:IsRedundantCrystalNotification(message) then return end
 
+        -- EotS has one neutral flag, so the battleground event faction always
+        -- describes its current carrier. Colour the whole pickup notice by that
+        -- faction before the CTF flag-object safety rule below can suppress it.
+        if self:IsEotSFlagPickupMessage(message) then
+            -- The BG-system event can be dispatched after Blizzard queues the
+            -- raid notice, so re-read the short-lived event cache here.
+            local carrierFaction = faction or self:GetRecordedFaction(message)
+            if carrierFaction then
+                self:ColorMatchingText(frame, message, carrierFaction)
+                return
+            end
+        end
+
         if self:ApplyFlagNotificationText(frame, message) then return end
         -- Do not fall back to colouring the whole CTF notification by the event
         -- faction. For flag strings the event faction is usually the actor, not
@@ -2204,39 +2425,13 @@ function Notifications:HandleRaidNoticeMessage(frame, message, colorInfo)
 end
 
 function Notifications:InstallHooks()
+    -- WoW 12.x can propagate secret values through Blizzard's raid-warning
+    -- FontStrings.  Do not hook the native warning frames or replace the global
+    -- RaidNotice_AddMessage function: either action puts BattleMaps into a
+    -- sensitive Blizzard execution path and can amplify taint from other addons.
+    -- Objective tracking is handled directly from CHAT_MSG_BG_SYSTEM_* and
+    -- RAID_BOSS_EMOTE/CHAT_MSG_RAID_BOSS_EMOTE in Core/Events.lua.
     self:InstallChatFilters()
-
-    self.frameHooks = self.frameHooks or {}
-    for _, frame in ipairs(self:GetManagedFrames()) do
-        if frame.HookScript and not self.frameHooks[frame] then
-            self.frameHooks[frame] = true
-            frame:HookScript("OnShow", function(shownFrame)
-                if Notifications:ShouldManage() then
-                    if C_Timer and C_Timer.After then
-                        C_Timer.After(0, function() Notifications:ApplyFrame(shownFrame) end)
-                    else
-                        Notifications:ApplyFrame(shownFrame)
-                    end
-                end
-            end)
-        end
-    end
-
-    if not self.addMessageHooked and type(RaidNotice_AddMessage) == "function" then
-        self.addMessageHooked = true
-        self.originalRaidNoticeAddMessage = RaidNotice_AddMessage
-        RaidNotice_AddMessage = function(frame, message, colorInfo, ...)
-            -- Objective state must be recorded before display filtering and
-            -- regardless of whether BattleMaps notification layout is enabled.
-            Notifications:RecordObjectiveStateFromRaidNotice(message)
-            if Notifications:ShouldManage() and Notifications:IsRedundantCrystalNotification(message) then
-                return
-            end
-            local result = Notifications.originalRaidNoticeAddMessage(frame, message, colorInfo, ...)
-            Notifications:HandleRaidNoticeMessage(frame, message, colorInfo)
-            return result
-        end
-    end
 end
 
 function Notifications:Apply()
@@ -2245,24 +2440,36 @@ function Notifications:Apply()
 
     local mover = self:EnsureMover()
     self:InstallHooks()
-    if not self:ShouldManage() then
-        self.moverUnlocked = false
-        mover:EnableMouse(false)
-        mover:SetAlpha(0)
-        if self.guide then self.guide:Hide() end
-        for _, frame in ipairs(self:GetManagedFrames()) do
+    self:AnchorMover()
+
+    local shouldManage = self:ShouldManage()
+    local shouldPlace = self.customPresentationEnabled ~= true
+        and self.nativeFramePlacementEnabled == true
+        and shouldManage
+    for _, frame in ipairs(self:GetManagedFrames()) do
+        if shouldPlace then
+            self:ApplyFrame(frame)
+        else
             self:RestoreNativeState(frame)
         end
-        return
+    end
+    if self.customPresentationEnabled == true then
+        self:ApplyDisplayLayout()
+        if not shouldManage then
+            if self.displayFrame then self.displayFrame:Hide() end
+            self:RestoreNativeDisplayAlpha()
+        end
     end
 
-    self:AnchorMover()
-    for _, frame in ipairs(self:GetManagedFrames()) do
-        self:ApplyFrame(frame)
+    if not self.moverUnlocked then
+        mover:EnableMouse(false)
+        mover:SetAlpha(0)
     end
+    if self.guide and not self.moverUnlocked then self.guide:Hide() end
 end
 
 function Notifications:ShowMover()
+    if self.nativeFramePlacementEnabled ~= true then return end
     local settings = GetNotificationSettings()
     if not settings or not settings.enabled then return end
     self.previewOverride = true
@@ -2308,30 +2515,25 @@ end
 
 function Notifications:Preview()
     self.previewOverride = true
-    self:Apply()
-    local frame = _G.RaidBossEmoteFrame or _G.RaidWarningFrame
-    if not frame then
-        BattleMaps.Chat("Native battleground notification frames are not available yet.")
-        return
+    self:ApplyDisplayLayout()
+    local frame = self:EnsureDisplayFrame()
+    local settings = GetNotificationSettings()
+    local r, g, b = self:GetDefaultNotificationTextColor()
+    if settings and settings.colorByFaction ~= false then
+        r, g, b = self:GetFactionColor("ALLIANCE")
     end
+    frame.text:SetText("BattleMaps battleground notification preview")
+    frame.text:SetTextColor(r or 1, g or 0.82, b or 0, 1)
+    frame:Show()
+    frame:Raise()
 
-    local text = "BattleMaps battleground notification preview"
-    local colorInfo = ChatTypeInfo and (ChatTypeInfo.RAID_BOSS_EMOTE or ChatTypeInfo.RAID_WARNING)
-        or { r = 1, g = 0.82, b = 0.10 }
-
-    if frame.Clear then pcall(frame.Clear, frame) end
-    if RaidNotice_AddMessage then
-        pcall(RaidNotice_AddMessage, frame, text, colorInfo)
-    elseif frame.AddMessage then
-        pcall(frame.AddMessage, frame, text, colorInfo.r or 1, colorInfo.g or 0.82, colorInfo.b or 0.10)
-    end
-    C_Timer.After(0, function() Notifications:ApplyFrame(frame) end)
+    local serial = (self.previewOverrideSerial or 0) + 1
+    self.previewOverrideSerial = serial
     if C_Timer and C_Timer.After then
-        local serial = (self.previewOverrideSerial or 0) + 1
-        self.previewOverrideSerial = serial
         C_Timer.After(2.5, function()
             if Notifications.previewOverrideSerial ~= serial or Notifications.moverUnlocked then return end
             Notifications.previewOverride = false
+            if Notifications.displayFrame then Notifications.displayFrame:Hide() end
             Notifications:Apply()
         end)
     end

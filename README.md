@@ -4,33 +4,34 @@ BattleMaps is a World of Warcraft Retail PvP addon that provides a configurable 
 
 ## Current status
 
-BattleMaps is under active development. The current source version is **2.7.8** and targets World of Warcraft Retail interface **120100**.
+BattleMaps is under active development. The current source version is **3.0.8** and targets World of Warcraft Retail interface **120100**.
 
 ## Highlights
 
 - Independent, movable and scalable Battlefield Map frame
 - Configurable player and team pins, including healer identification and pin layering
+- Layered player field-of-view cone with per-battleground masking and independent scaling
 - Objective, vehicle, flag and capture-state presentation for supported battlegrounds
+- Clickable objective callouts with configurable tactical message templates
 - Capture timers, faction-coloured notifications, pulse and flash effects
+- Configurable notification position, attachment, alignment, width and scale
 - Carried-objective breadcrumbs, glow wakes and spawn tethers on supported maps
 - Test Mode for previewing map layouts and settings outside a live battleground
-- Optional World Map presentation and ElvUI battleground-layout integration
+- Optional World Map presentation and a provider-aware battleground layout for Blizzard UI or ElvUI
+- Optional non-epic BG HUD layout that hides the minimap and relocates player auras into the freed space
+- Per-map layout locking with persistent position, size, pan and zoom, plus a non-intrusive external hover header
 
 Current objective support includes standard capture bases, Warsong Gulch and Twin Peaks flags, Eye of the Storm, Temple of Kotmogu orbs, Silvershard Mines carts, Deephaul Ravine crystals, and Seething Shore objectives. Client APIs and battleground states can change, so edge cases are still being tested and refined.
 
 ## Installation
 
-This repository currently contains the addon source rather than a packaged release download.
-
-1. Download the repository source from GitHub.
-2. Extract it so this file is in the expected location:
+Install BattleMaps with the CurseForge app, or download the release ZIP and extract the `BattleMaps` folder so this file is in the expected location:
 
    ```text
    World of Warcraft\_retail_\Interface\AddOns\BattleMaps\BattleMaps.toc
    ```
 
-3. Start or restart World of Warcraft.
-4. Enable **BattleMaps** in the character-selection AddOns list.
+Then start or restart World of Warcraft and enable **BattleMaps** in the character-selection AddOns list.
 
 ## Getting started
 

@@ -88,6 +88,8 @@ Events:RegisterEvent("PLAYER_REGEN_ENABLED")
 Events:RegisterEvent("CHAT_MSG_BG_SYSTEM_ALLIANCE")
 Events:RegisterEvent("CHAT_MSG_BG_SYSTEM_HORDE")
 Events:RegisterEvent("CHAT_MSG_BG_SYSTEM_NEUTRAL")
+Events:RegisterEvent("CHAT_MSG_RAID_BOSS_EMOTE")
+Events:RegisterEvent("RAID_BOSS_EMOTE")
 Events:RegisterEvent("DISPLAY_SIZE_CHANGED")
 Events:RegisterEvent("UI_SCALE_CHANGED")
 
@@ -122,7 +124,21 @@ Events:SetScript("OnEvent", function(_, event, ...)
         -- Pins.lua owns stationary objective records/timers; ObjectiveTextures.lua
         -- extends that same receiver for Deephaul/CTF/EotS-specific state.
         if BattleMaps.Pins then BattleMaps.Pins:RecordObjectiveFactionMessage(event, arg1) end
-        if BattleMaps.Notifications then BattleMaps.Notifications:RecordFactionMessage(event, arg1) end
+        if BattleMaps.Notifications then
+            BattleMaps.Notifications:RecordFactionMessage(event, arg1)
+            BattleMaps.Notifications:ShowBattlegroundMessage(event, arg1)
+        end
+    elseif event == "CHAT_MSG_RAID_BOSS_EMOTE" or event == "RAID_BOSS_EMOTE" then
+        -- Some objective lifecycle notices bypass CHAT_MSG_BG_SYSTEM_*. Route
+        -- the raw raid/boss-emote source to the objective renderer first (for
+        -- Deephaul crystal spawn/despawn), then let Notifications layer its
+        -- Kotmogu release handling on the same event.
+        if BattleMaps.Pins and BattleMaps.Pins.RecordObjectiveRaidNotice then
+            BattleMaps.Pins:RecordObjectiveRaidNotice(arg1)
+        end
+        if BattleMaps.Notifications then
+            BattleMaps.Notifications:RecordObjectiveStateFromRaidNotice(arg1)
+        end
     elseif event == "PLAYER_ENTERING_WORLD"
         or event == "ZONE_CHANGED_NEW_AREA"
         or event == "PLAYER_MAP_CHANGED"

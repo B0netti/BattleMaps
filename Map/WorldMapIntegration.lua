@@ -5,6 +5,7 @@ local WorldMapIntegration = {
     worldMapFrame = nil,
     canvasContainer = nil,
     hookedWorldMapFrame = nil,
+    callbacksInstalled = false,
     hookedContainers = setmetatable({}, { __mode = "k" }),
     evaluationSerial = 0,
     providerRefreshSerial = 0,
@@ -448,6 +449,30 @@ function WorldMapIntegration:OnPlayerLocationChanged()
     end
 end
 
+function WorldMapIntegration:OnWorldMapResized()
+    self:QueueEmbeddedLayoutRefresh()
+    if self:IsWorldMapShown() then
+        self:QueueAutomaticEvaluation({ 0.05, 0.20 })
+    end
+end
+
+function WorldMapIntegration:InstallWorldMapCallbacks()
+    if self.callbacksInstalled then return true end
+    local registry = _G.EventRegistry
+    if not registry or type(registry.RegisterCallback) ~= "function" then return false end
+
+    -- Blizzard fires these callbacks at the end of WorldMapMixin:OnShow/OnHide.
+    -- Registering here keeps BattleMaps out of the WorldMapFrame script chain,
+    -- so Blizzard's protected PerformEmote("READ") runs before BattleMaps code.
+    registry:RegisterCallback("WorldMapOnShow", self.OnWorldMapShown, self)
+    registry:RegisterCallback("WorldMapOnHide", self.OnWorldMapHidden, self)
+    registry:RegisterCallback("WorldMapMaximized", self.OnWorldMapResized, self)
+    registry:RegisterCallback("WorldMapMinimized", self.OnWorldMapResized, self)
+    self.callbacksInstalled = true
+    BattleMaps.Debug("World Map EventRegistry callbacks installed")
+    return true
+end
+
 function WorldMapIntegration:HookCanvasContainer(container)
     if not IsUsableFrame(container) or self.hookedContainers[container] then return end
     self.hookedContainers[container] = true
@@ -458,34 +483,27 @@ end
 
 function WorldMapIntegration:InstallWorldMapHooks(worldMapFrame)
     if not IsUsableFrame(worldMapFrame) then return false end
-    if self.hookedWorldMapFrame == worldMapFrame then
-        self:HookCanvasContainer(self:ResolveCanvasContainer(worldMapFrame))
-        return true
-    end
 
-    self.hookedWorldMapFrame = worldMapFrame
-    worldMapFrame:HookScript("OnShow", function()
-        WorldMapIntegration:OnWorldMapShown()
-    end)
-    worldMapFrame:HookScript("OnHide", function()
-        WorldMapIntegration:OnWorldMapHidden()
-    end)
-    worldMapFrame:HookScript("OnSizeChanged", function()
-        WorldMapIntegration:QueueEmbeddedLayoutRefresh()
-    end)
-
-    if type(hooksecurefunc) == "function" and type(worldMapFrame.SetMapID) == "function" then
-        pcall(hooksecurefunc, worldMapFrame, "SetMapID", function()
-            WorldMapIntegration:OnWorldMapChanged()
-        end)
+    -- Never HookScript WorldMapFrame:OnShow/OnHide.  Blizzard's OnShow performs
+    -- a protected C_ChatInfo.PerformEmote call before firing WorldMapOnShow; a
+    -- direct addon script hook can participate in that tainted execution chain.
+    -- Use EventRegistry for lifecycle and only a secure post-hook for map-ID
+    -- changes, which are needed while the map remains open.
+    if self.hookedWorldMapFrame ~= worldMapFrame then
+        self.hookedWorldMapFrame = worldMapFrame
+        if type(hooksecurefunc) == "function" and type(worldMapFrame.SetMapID) == "function" then
+            pcall(hooksecurefunc, worldMapFrame, "SetMapID", function()
+                WorldMapIntegration:OnWorldMapChanged()
+            end)
+        end
     end
 
     self:HookCanvasContainer(self:ResolveCanvasContainer(worldMapFrame))
-    BattleMaps.Debug("World Map integration hooks installed")
     return true
 end
 
 function WorldMapIntegration:RefreshReferences()
+    self:InstallWorldMapCallbacks()
     local worldMapFrame = self:GetWorldMapFrame()
     if not worldMapFrame then return false end
     self:ResolveCanvasContainer(worldMapFrame)
@@ -522,6 +540,8 @@ function WorldMapIntegration:Initialize()
     eventFrame:RegisterEvent("ZONE_CHANGED_NEW_AREA")
     eventFrame:RegisterEvent("PLAYER_MAP_CHANGED")
     eventFrame:RegisterEvent("UPDATE_INSTANCE_INFO")
+    eventFrame:RegisterEvent("DISPLAY_SIZE_CHANGED")
+    eventFrame:RegisterEvent("UI_SCALE_CHANGED")
     eventFrame:SetScript("OnEvent", function(_, event, loadedAddon)
         if event == "ADDON_LOADED" then
             if loadedAddon == "Blizzard_WorldMap" or loadedAddon == BattleMaps.addonName then
@@ -530,11 +550,15 @@ function WorldMapIntegration:Initialize()
         elseif event == "PLAYER_LOGIN" then
             WorldMapIntegration:RefreshReferences()
             WorldMapIntegration:OnPlayerLocationChanged()
+        elseif event == "DISPLAY_SIZE_CHANGED" or event == "UI_SCALE_CHANGED" then
+            WorldMapIntegration:QueueEmbeddedLayoutRefresh()
+            WorldMapIntegration:OnPlayerLocationChanged()
         else
             WorldMapIntegration:OnPlayerLocationChanged()
         end
     end)
 
+    self:InstallWorldMapCallbacks()
     self:RefreshReferences()
 end
 

@@ -13,7 +13,8 @@ end
 local CTF_SLOT_LOCK_SECONDS = 15 * 60
 local DEEPHAUL_RAVINE_MAP_ID = 2345
 local DEEPHAUL_CRYSTAL_HIDDEN_SECONDS = 120
-local DEEPHAUL_CRYSTAL_REAPPEAR_DELAY_SECONDS = 3
+local DEEPHAUL_CRYSTAL_RESPAWN_SECONDS = 25
+local DEEPHAUL_CRYSTAL_REAPPEAR_DELAY_SECONDS = 0.20
 local TEMPLE_ORB_DROP_SUPPRESSION_SECONDS = 10.0
 
 local function IsDeephaulRavineMapID(mapID)
@@ -216,17 +217,20 @@ function Pins:RecordCTFFlagObjectFactionMessage(mapID, flagObjectFaction, taken,
 
     if returnedOrCaptured then
         state[flagObjectFaction] = nil
-        ClearRememberedCTFFlagObjectFaction(self, mapID, flagObjectFaction)
+        -- The battlefield flag list is compact. When either flag is removed
+        -- from that list the remaining flag can move to a different API index,
+        -- so every index->object lock for this map becomes suspect.
+        ClearRememberedCTFFlagObjectFaction(self, mapID)
         if type(self.ctfFlagEffectMotionByKey) == "table" then wipe(self.ctfFlagEffectMotionByKey) end
         return true
     end
 
     if dropped then
-        -- Dropping a flag ends the previous carrier/slot assignment. Blizzard
-        -- may reinsert the dropped or re-picked flag under a different API slot,
-        -- so index-based locks for this flag object must be discarded while the
-        -- object itself remains active/away from base.
-        ClearRememberedCTFFlagObjectFaction(self, mapID, flagObjectFaction)
+        -- Dropping/re-picking can compact and reorder the entire battlefield
+        -- flag list, not just the slot that previously represented this flag.
+        -- Invalidate all per-index locks and rebuild them from the explicit
+        -- flag-object message/token data on the next refresh.
+        ClearRememberedCTFFlagObjectFaction(self, mapID)
         if type(self.ctfFlagEffectMotionByKey) == "table" then wipe(self.ctfFlagEffectMotionByKey) end
         state[flagObjectFaction] = {
             active = true,
@@ -238,10 +242,10 @@ function Pins:RecordCTFFlagObjectFactionMessage(mapID, flagObjectFaction, taken,
     end
 
     if taken then
-        -- A new pickup also starts a new carrier/slot assignment. Rebuild the
-        -- slot lock from token/texture/message on the next flag refresh instead
-        -- of carrying over a stale drop-era slot.
-        ClearRememberedCTFFlagObjectFaction(self, mapID, flagObjectFaction)
+        -- A new pickup also starts a new compact-slot assignment. Clear the
+        -- complete map-level slot cache because Blizzard may have reindexed the
+        -- other carried flag at the same time.
+        ClearRememberedCTFFlagObjectFaction(self, mapID)
         state[flagObjectFaction] = {
             active = true,
             dropped = false,
@@ -260,6 +264,14 @@ function Pins:RecordDeephaulCrystalMessage(mapID, message)
     local text = NormalizeMessageText(message)
     if text == "" or not text:find("crystal", 1, true) then return false end
 
+    -- Blizzard also emits a static rules reminder containing the words
+    -- "crystal" and "captured". It is not a lifecycle event and previously
+    -- could incorrectly force the synthetic centre crystal visible.
+    if text:find("the crystal can be captured outside an earthen cart building", 1, true)
+        or (text:find("can be captured", 1, true) and text:find("cart building", 1, true)) then
+        return false
+    end
+
     local pickup = MessageHasAny(text, {
         "picked up",
         "has taken",
@@ -269,10 +281,17 @@ function Pins:RecordDeephaulCrystalMessage(mapID, message)
         "grabbed",
         "carrying the crystal",
     })
-    local offGround = pickup or MessageHasAny(text, {
+    local dropped = MessageHasAny(text, {
         "dropped",
         "has dropped",
         "was dropped",
+    })
+    local scored = MessageHasAny(text, {
+        "captured",
+        "delivered",
+        "scored",
+        "turned in",
+        "turned-in",
     })
     local reappears = MessageHasAny(text, {
         "returned",
@@ -281,32 +300,47 @@ function Pins:RecordDeephaulCrystalMessage(mapID, message)
         "respawn",
         "spawned",
         "available",
-        "captured",
-        "delivered",
-        "scored",
+        "unearthed",
+        "center of the ravine",
+        "centre of the ravine",
     })
 
-    if not offGround and not reappears then return false end
+    if not pickup and not dropped and not scored and not reappears then return false end
 
     local now = Now()
     self.deephaulCrystalState = self.deephaulCrystalState or {}
     local state = self.deephaulCrystalState
+    local refreshDelay
 
-    if offGround then
+    if pickup or dropped then
+        -- Once the crystal leaves centre, the synthetic centre pin must be
+        -- absent even if Blizzard exposes no moving carried-crystal position.
         state.visible = false
         state.hiddenUntil = now + DEEPHAUL_CRYSTAL_HIDDEN_SECONDS
         state.visibleAfter = nil
         state.reason = pickup and "picked-up" or "dropped"
+    elseif scored then
+        -- A successful delivery removes the centre crystal. Live testing and
+        -- community timing put the ordinary respawn at ~25 seconds; use that
+        -- as a fallback in case the later spawn notice arrives on a different
+        -- battleground announcement channel. A real spawn/reset notice wins
+        -- immediately if Blizzard sends one first.
+        state.visible = true
+        state.hiddenUntil = nil
+        state.visibleAfter = now + DEEPHAUL_CRYSTAL_RESPAWN_SECONDS
+        state.reason = "scored"
+        refreshDelay = DEEPHAUL_CRYSTAL_RESPAWN_SECONDS + 0.05
     elseif reappears then
         state.visible = true
         state.hiddenUntil = nil
         state.visibleAfter = now + DEEPHAUL_CRYSTAL_REAPPEAR_DELAY_SECONDS
         state.reason = "available"
+        refreshDelay = DEEPHAUL_CRYSTAL_REAPPEAR_DELAY_SECONDS + 0.05
     end
 
     QueueObjectiveMessageRefresh(self, false, true)
-    if reappears and C_Timer and C_Timer.After then
-        C_Timer.After(DEEPHAUL_CRYSTAL_REAPPEAR_DELAY_SECONDS + 0.05, function()
+    if refreshDelay and C_Timer and C_Timer.After then
+        C_Timer.After(refreshDelay, function()
             if BattleMaps.MapFrame and BattleMaps.MapFrame.frame and BattleMaps.MapFrame.frame:IsShown()
                 and self.RefreshPOIs then
                 self:RefreshPOIs()
@@ -314,6 +348,15 @@ function Pins:RecordDeephaulCrystalMessage(mapID, message)
         end)
     end
     return true
+end
+
+-- Some battleground objective state notices arrive through Blizzard's
+-- raid/boss-emote channel rather than CHAT_MSG_BG_SYSTEM_*. Keep the Deephaul
+-- lifecycle receiver available directly at that event source.
+function Pins:RecordObjectiveRaidNotice(message)
+    local mapID = GetCurrentObjectiveMessageMapID()
+    if not mapID or not IsDeephaulRavineMapID(mapID) then return false end
+    return self:RecordDeephaulCrystalMessage(mapID, message) == true
 end
 
 function Pins:IsDeephaulCrystalVisible(mapID)
@@ -858,20 +901,25 @@ end
 
 function Pins:ResolveCarriedObjectiveFaction(mapID, texture, explicitState, index, x, y, alternateTexture)
     if IsCTF(mapID) then
-        -- CTF maps must identify the flag object, not the carrier. The legacy
-        -- token is usually AllianceFlag/HordeFlag and is the cleanest source.
+        local activeCount = tonumber(self and self.BattleMapsActiveCarriedFlagCount)
+
+        -- A colour-specific battleground message identifies the *flag object*
+        -- directly ("Alliance Flag" / "Horde Flag"). After a drop/re-pick,
+        -- Blizzard can compact/reorder its flag slots before the legacy token
+        -- catches up. Prefer the validated message/slot lock first so a stale
+        -- token cannot immediately recreate the opposite-faction assignment.
+        -- GetLockedCTFFlagObjectFaction deliberately declines the one-active
+        -- shortcut when hidden raw slots make that inference unsafe.
+        local lockedFaction = self:GetLockedCTFFlagObjectFaction(mapID, index, activeCount)
+        if lockedFaction then return lockedFaction end
+
+        -- The legacy token remains the strongest API-side identity when there
+        -- is no unambiguous recent message assignment.
         local tokenFaction = Private.InferCTFFlagObjectFactionFromToken
             and Private.InferCTFFlagObjectFactionFromToken(alternateTexture)
         if tokenFaction then
             return self:RememberCTFFlagObjectFaction(mapID, index, tokenFaction, "legacy-token")
         end
-
-        -- Narrow BG-message fallback: only uses "The Alliance/Horde flag" and
-        -- ignores player names. This fixes one-flag-away cases where the API
-        -- slot or texture describes the carrier/factionless state instead.
-        local activeCount = tonumber(self and self.BattleMapsActiveCarriedFlagCount)
-        local lockedFaction = self:GetLockedCTFFlagObjectFaction(mapID, index, activeCount)
-        if lockedFaction then return lockedFaction end
 
         -- If both CTF flags are now away, preserve whatever this API slot was
         -- first proven to be. Without this lock, the second pickup can cause the

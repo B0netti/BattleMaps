@@ -2,7 +2,7 @@
 ## Title: |cffE3AD68BattleMaps|r
 ## Notes: Tactical BG Maps.
 ## Author: Bonetti
-## Version: 2.7.8
+## Version: 3.0.8
 ## SavedVariables: BattleMapsDB
 ## Category: PvP
 ## Category-deDE: PvP
@@ -25,6 +25,7 @@ Core\Core.lua
 Integrations\ElvUIIntegration.lua
 Core\Battlegrounds.lua
 Core\Database.lua
+Integrations\AuraLayout.lua
 Objectives\ObjectiveRules.lua
 Map\MapRenderer.lua
 Map\MapFrame.lua
@@ -36,6 +37,7 @@ Objectives\ObjectiveTextures.lua
 Objectives\PreviewPins.lua
 Objectives\CarriedObjectives.lua
 Objectives\ObjectivePins.lua
+Objectives\Callouts.lua
 Options\Options.lua
 Options\OptionsWidgets.lua
 Options\OptionsGeneral.lua
@@ -43,6 +45,8 @@ Options\OptionsElvUI.lua
 Options\OptionsUnits.lua
 Options\OptionsBases.lua
 Options\OptionsCarts.lua
+Options\OptionsCallouts.lua
 Options\OptionsFlags.lua
 Options\OptionsNotifications.lua
+Options\OptionsPolish.lua
 Core\Events.lua

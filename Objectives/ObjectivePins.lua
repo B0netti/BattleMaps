@@ -122,6 +122,72 @@ local EOTS_CENTER_X = 0.50
 local EOTS_CENTER_Y = 0.50
 local EOTS_STATIONARY_FLAG_HIDE_RADIUS = 0.075
 
+-- EotS is unusual on current clients: the central Netherstorm flag can be
+-- published even when the four capture bases are absent from the live Area
+-- POI result. Keep the fixed base identities/coordinates here so one unrelated
+-- live POI cannot suppress the entire base fallback layer.
+local EOTS_BASE_OBJECTIVES = {
+    { name = "Mage Tower", objectiveKey = "mage_tower", x = 0.39, y = 0.40 },
+    { name = "Draenei Ruins", objectiveKey = "draenei_ruins", x = 0.61, y = 0.40 },
+    { name = "Fel Reaver Ruins", objectiveKey = "fel_reaver_ruins", x = 0.39, y = 0.62 },
+    { name = "Blood Elf Tower", objectiveKey = "blood_elf_tower", x = 0.61, y = 0.62 },
+}
+local EOTS_BASE_MATCH_RADIUS = 0.115
+
+local function GetEotSBaseAtPosition(mapID, x, y)
+    if tonumber(mapID) ~= 210 then return nil end
+    x, y = tonumber(x), tonumber(y)
+    if not x or not y then return nil end
+
+    local nearest, nearestDistance
+    for _, base in ipairs(EOTS_BASE_OBJECTIVES) do
+        local dx, dy = x - base.x, y - base.y
+        local distance = (dx * dx) + (dy * dy)
+        if not nearestDistance or distance < nearestDistance then
+            nearest = base
+            nearestDistance = distance
+        end
+    end
+
+    if nearestDistance and nearestDistance <= (EOTS_BASE_MATCH_RADIUS * EOTS_BASE_MATCH_RADIUS) then
+        return nearest
+    end
+    return nil
+end
+
+local function WithEotSBaseIdentity(info, base)
+    if type(info) ~= "table" or type(base) ~= "table" then return info end
+    local copy = {}
+    for key, value in pairs(info) do copy[key] = value end
+    copy.name = copy.name or base.name
+    copy.objectiveKey = base.objectiveKey
+    return copy
+end
+
+local function HasShownPinNear(collection, x, y, radius, maxIndex)
+    radius = tonumber(radius) or 0.03
+    local maxDistance = radius * radius
+    collection = collection or {}
+    local limit = tonumber(maxIndex) or #collection
+    limit = math.max(0, math.min(limit, #collection))
+
+    -- When called during a pool refresh, only inspect frames populated during
+    -- the current pass. Frames beyond `used` may still be visible from the
+    -- previous pass until the final pool cleanup; treating those stale frames
+    -- as current can make an authored fallback skip a base and then immediately
+    -- hide the stale frame, producing an every-other-refresh flicker.
+    for index = 1, limit do
+        local pin = collection[index]
+        if pin and pin:IsShown() and pin.mapX and pin.mapY then
+            local dx, dy = pin.mapX - x, pin.mapY - y
+            if ((dx * dx) + (dy * dy)) <= maxDistance then
+                return true
+            end
+        end
+    end
+    return false
+end
+
 local function ShouldSuppressEotSStationaryFlag(pins, mapID, x, y)
     if tonumber(mapID) ~= 210 or not pins then return false end
     if not pins.IsEotSStationaryFlagSuppressed
@@ -209,7 +275,9 @@ local function ApplyStationaryObjectiveAlpha(pin, mapID)
     -- to the Base opacity slider, and avoids double-fading stacked progress
     -- textures.
     pin.BattleMapsStationaryObjectiveAlpha = alpha
-    if pin.SetAlpha then pin:SetAlpha(alpha) end
+    if pin.SetAlpha then
+        pin:SetAlpha(pin.BattleMapsCalloutHoverSuppressed == true and 0 or alpha)
+    end
 
     -- The main artwork should remain fully opaque within the pin frame.
     -- Animation layers still use their own alpha values for pulse/flash timing;
@@ -780,7 +848,13 @@ function Pins:RefreshVehicles()
     self:HideDummyPins()
 
     local mapID = BattleMaps.MapFrame.currentMapID
-    if not mapID or not ObjectiveCategoryEnabled(mapID, "vehicle")
+    local liveMapID = BattleMaps.ResolveCurrentBattlegroundMapID
+        and BattleMaps.ResolveCurrentBattlegroundMapID()
+    local isMatchingLiveMap = BattleMaps.IsInLiveBattleground
+        and BattleMaps.IsInLiveBattleground()
+        and tonumber(liveMapID) == tonumber(mapID)
+    if not isMatchingLiveMap
+        or not mapID or not ObjectiveCategoryEnabled(mapID, "vehicle")
         or not C_PvP or not C_PvP.GetBattlefieldVehicles or not C_PvP.GetBattlefieldVehicleInfo then
         HidePinCollection(self.vehiclePins)
         return
@@ -856,7 +930,54 @@ end
 
 
 local function AddFallbackStationaryPOIs(pins, mapID, used, pinScale)
-    if used > 0 or not pins or type(pins.GetPreviewPOIInfos) ~= "function" then return used end
+    if not pins then return used end
+
+    local isEotS = tonumber(mapID) == 210
+    if used > 0 and not isEotS then return used end
+
+    -- Eye of the Storm must not use the generic all-or-nothing fallback gate.
+    -- The client can return the centre flag as the only Area POI; that makes
+    -- `used` non-zero even though none of the four bases exist. Ensure each
+    -- fixed base independently, while retaining any live base already present.
+    if isEotS then
+        for _, base in ipairs(EOTS_BASE_OBJECTIVES) do
+            if not HasShownPinNear(pins.poiPins, base.x, base.y, EOTS_BASE_MATCH_RADIUS, used) then
+                local info = {
+                    name = base.name,
+                    description = "Eye of the Storm base",
+                    objectiveKey = base.objectiveKey,
+                    x = base.x,
+                    y = base.y,
+                }
+                local pin = pins:GetPOIPin(used + 1)
+                local shown = SetPOITexture(pin, info, pinScale, mapID, base.objectiveKey)
+                if not shown then
+                    shown = SetFileTexture(
+                        pin,
+                        "Interface\\Icons\\INV_Misc_Map_01",
+                        32 * pinScale,
+                        32 * pinScale,
+                        nil,
+                        16 * pinScale,
+                        16 * pinScale
+                    )
+                end
+                if shown then
+                    used = used + 1
+                    ApplyStationaryObjectiveAlpha(pin, mapID)
+                    pins:SyncObjectivePulseTexture(pin)
+                    if pin.glow then pin.glow:SetShown(false) end
+                    SetTooltip(pin, base.name, info.description)
+                    pins:Place(pin, base.x, base.y)
+                    pins:ApplyObjectiveCaptureTimerToPin(
+                        pin, mapID, base.objectiveKey, info, base.x, base.y)
+                end
+            end
+        end
+        return used
+    end
+
+    if type(pins.GetPreviewPOIInfos) ~= "function" then return used end
 
     -- Seething Shore's live stationary objectives are vignettes on current
     -- clients. Never feed its preview/cache records back through the Area-POI
@@ -1041,16 +1162,23 @@ function Pins:RefreshPOIs()
         if infoOK and info and info.position then
             local x, y = info.position:GetXY()
             if x and y and not ShouldSuppressEotSStationaryFlag(self, mapID, x, y) then
+                local sourceIndex = poiID
+                local eotsBase = GetEotSBaseAtPosition(mapID, x, y)
+                if eotsBase then
+                    info = WithEotSBaseIdentity(info, eotsBase)
+                    sourceIndex = eotsBase.objectiveKey
+                end
+
                 local pin = self:GetPOIPin(used + 1)
-                if SetPOITexture(pin, info, pinScale, mapID, poiID) then
-                    self:CachePreviewPOIInfo(mapID, info, x, y, poiID)
+                if SetPOITexture(pin, info, pinScale, mapID, sourceIndex) then
+                    self:CachePreviewPOIInfo(mapID, info, x, y, sourceIndex)
                     used = used + 1
                     ApplyStationaryObjectiveAlpha(pin, mapID)
                     self:SyncObjectivePulseTexture(pin)
                     pin.glow:SetShown(info.shouldGlow == true)
                     SetTooltip(pin, info.name or "Objective", info.description)
                     self:Place(pin, x, y)
-                    self:ApplyObjectiveCaptureTimerToPin(pin, mapID, poiID, info, x, y)
+                    self:ApplyObjectiveCaptureTimerToPin(pin, mapID, sourceIndex, info, x, y)
                 end
             end
         end
@@ -1118,30 +1246,48 @@ function Pins:RefreshScenarios()
     local pinScale = baseScale * self:GetPinZoomScale()
     local used = 0
 
-    for _, info in ipairs(iconInfos) do
-        if info and info.x and info.y and info.atlas
-            and not ShouldSuppressEotSStationaryFlag(self, mapID, info.x, info.y) then
+    for _, rawInfo in ipairs(iconInfos) do
+        if rawInfo and rawInfo.x and rawInfo.y and rawInfo.atlas
+            and not ShouldSuppressEotSStationaryFlag(self, mapID, rawInfo.x, rawInfo.y) then
+            local info = rawInfo
+            local sourceIndex = used + 1
+            local eotsBase = GetEotSBaseAtPosition(mapID, rawInfo.x, rawInfo.y)
+            if eotsBase then
+                info = WithEotSBaseIdentity(rawInfo, eotsBase)
+                sourceIndex = eotsBase.objectiveKey
+            end
+
             self:CachePreviewPOIInfo(mapID, {
                 atlasName = info.atlas,
+                objectiveKey = info.objectiveKey,
                 name = info.name,
                 description = info.description,
-            }, info.x, info.y, used + 1)
-            used = used + 1
-            local pin = self:GetScenarioPin(used)
-            pin:SetSize(24 * pinScale, 24 * pinScale)
-            local scenarioKeys = BuildObjectiveKeys(info, used, "stationary")
-            local scenarioState = self:ResolveStationaryObjectiveState(mapID, used, info)
-            local customScenario = self:FindObjectiveTexture(mapID, "stationary", scenarioKeys, scenarioState)
-            if customScenario then
-                SetFileTexture(pin, customScenario, 24 * pinScale, 24 * pinScale)
+            }, info.x, info.y, sourceIndex)
+
+            if eotsBase then
+                -- EotS bases are rendered by the unified POI/fallback layer so
+                -- a provider appearing/disappearing cannot create duplicate or
+                -- missing towers. Still consume the scenario atlas here: it is
+                -- useful ownership state after a /reload or mid-match join.
+                self:ResolveStationaryObjectiveState(mapID, sourceIndex, info)
             else
-                pin.texture:SetAtlas(info.atlas, false)
-                pin.texture:SetVertexColor(1, 1, 1, 1)
-                pin.texture:SetRotation(0)
+                used = used + 1
+                local pin = self:GetScenarioPin(used)
+                pin:SetSize(24 * pinScale, 24 * pinScale)
+                local scenarioKeys = BuildObjectiveKeys(info, sourceIndex, "stationary")
+                local scenarioState = self:ResolveStationaryObjectiveState(mapID, sourceIndex, info)
+                local customScenario = self:FindObjectiveTexture(mapID, "stationary", scenarioKeys, scenarioState)
+                if customScenario then
+                    SetFileTexture(pin, customScenario, 24 * pinScale, 24 * pinScale)
+                else
+                    pin.texture:SetAtlas(info.atlas, false)
+                    pin.texture:SetVertexColor(1, 1, 1, 1)
+                    pin.texture:SetRotation(0)
+                end
+                ApplyStationaryObjectiveAlpha(pin, mapID)
+                SetTooltip(pin, info.name or "Battleground objective", info.description)
+                self:Place(pin, info.x, info.y)
             end
-            ApplyStationaryObjectiveAlpha(pin, mapID)
-            SetTooltip(pin, info.name or "Battleground objective", info.description)
-            self:Place(pin, info.x, info.y)
         end
     end
 

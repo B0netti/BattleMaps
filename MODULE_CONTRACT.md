@@ -11,6 +11,9 @@ Own saved defaults, per-battleground configuration, battleground metadata, and m
 ## Integrations/ElvUIIntegration.lua
 Owns optional ElvUI detection/integration only. It should not own BattleMaps runtime rendering logic.
 
+## Integrations/BattlegroundUI.lua
+Owns optional battleground-only Blizzard HUD integration: Objective Tracker suppression/restoration. Do not attach BattleMaps-owned regions to ElvUI or other secure third-party unit frames; the 2.8.9-2.8.10 flag-carrier unit-frame experiment was removed after it caused a WoW client crash.
+
 ## Map/MapFrame.lua / Map/MapRenderer.lua
 Own the independent Battlefield Map frame, map texture rendering, viewport behaviour, anchoring, zoom/pan, drag/configure mode, and custom map assets. Custom map texture registration is consolidated into MapRenderer.lua.
 
@@ -51,3 +54,7 @@ Own event registration and dispatch. It should translate game events/messages in
 - Data/rules modules should not create frames or animations.
 - Event modules should dispatch, not render.
 - `Pins:RecordObjectiveFactionMessage` is a chained handler. New modules must not replace it without preserving the previous implementation.
+
+## Integrations/ElvUIClassificationRefresh.lua
+
+Owns the non-invasive ElvUI/oUF PvP objective-classification refresh shim. It may call `ForceUpdate()` only on ElvUI's already-existing and already-enabled `PvPClassificationIndicator`; it must not create or attach regions to ElvUI secure unit frames.

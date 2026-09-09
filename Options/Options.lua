@@ -167,11 +167,11 @@ function Options:GetSettingsPageDefinitions()
     -- Fallback for unexpected load-order failures. The real definitions are
     -- registered by the page files after OptionsWidgets.lua is loaded.
     return {
-        { key = "general", label = "General", height = 680, createMethod = "CreateGeneralPage", order = 10 },
-        { key = "units", label = "Units", height = 650, createMethod = "CreateUnitsPage", order = 20 },
+        { key = "general", label = "General", height = 740, createMethod = "CreateGeneralPage", order = 10 },
+        { key = "units", label = "Units", height = 680, createMethod = "CreateUnitsPage", order = 20 },
         { key = "bases", label = "Bases", height = 800, createMethod = "CreateBasesPage", order = 30 },
-        { key = "carts", label = "Carts", height = 220, createMethod = "CreateCartsPage", order = 35 },
-        { key = "flags", label = "Flags", height = 542, createMethod = "CreateFlagsPage", order = 40 },
+        { key = "flags", label = "Flags & Carts", height = 600, createMethod = "CreateFlagsPage", order = 35 },
+        { key = "callouts", label = "Callouts", height = 560, createMethod = "CreateCalloutsPage", order = 40 },
         { key = "notifications", label = "Notifications", height = 650, createMethod = "CreateNotificationsPage", order = 50 },
     }
 end
@@ -915,10 +915,14 @@ function Options:CreateMapSelector(frame)
         local button = MakeButton(selector, "", 28, 24)
         local icon = button:CreateTexture(nil, "ARTWORK")
         icon:SetPoint("CENTER")
-        icon:SetSize(18, 18)
+        icon:SetSize(24, 24)
         icon:SetTexture(direction < 0
             and "Interface\\Buttons\\UI-SpellbookIcon-PrevPage-Up"
             or "Interface\\Buttons\\UI-SpellbookIcon-NextPage-Up")
+        -- The spellbook page-arrow files include generous transparent margins.
+        -- Crop those margins so the arrow artwork fills most of the small
+        -- BattleMaps cycle button instead of floating in its centre.
+        icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
         button.icon = icon
 
         button:SetScript("OnClick", function()
@@ -1204,10 +1208,14 @@ function Options:CreateTabs(frame)
         button:SetFrameLevel(frame:GetFrameLevel() + 8)
         local icon = button:CreateTexture(nil, "ARTWORK")
         icon:SetPoint("CENTER")
-        icon:SetSize(18, 18)
+        icon:SetSize(24, 24)
         icon:SetTexture(direction < 0
             and "Interface\\Buttons\\UI-SpellbookIcon-PrevPage-Up"
             or "Interface\\Buttons\\UI-SpellbookIcon-NextPage-Up")
+        -- The spellbook page-arrow files include generous transparent margins.
+        -- Crop those margins so the arrow artwork fills most of the small
+        -- BattleMaps cycle button instead of floating in its centre.
+        icon:SetTexCoord(0.08, 0.92, 0.08, 0.92)
         button.icon = icon
         button:SetScript("OnClick", function() self:SelectAdjacentSettingsPage(direction) end)
         button:HookScript("OnEnter", function(owner)
@@ -1479,8 +1487,8 @@ function Options:Create()
 
         local mapFrame = BattleMaps.MapFrame
 
-        -- Closing the options window also ends map editing. Saving remains an
-        -- explicit action; closing without Save restores the pre-edit layout.
+        -- Lock is the only action that persists layout edits. Closing Options
+        -- while the map is still unlocked discards the unconfirmed snapshot.
         if mapFrame and mapFrame.editMode then
             mapFrame:CancelEdit()
         end
@@ -1564,7 +1572,6 @@ function Options:Refresh()
     SetControlEnabled(self.healerIconCustomColorControl, healerIconEnabled)
     SetControlEnabled(self.excludePlayerArrowFromStackCheck, teamStackingEnabled)
     SetControlEnabled(self.teamPinStackOverlapSlider, teamStackingEnabled)
-    SetControlEnabled(self.teamPinStackDirectionDropdown, teamStackingEnabled)
 
     local objectiveTypes = BattleMaps.GetObjectiveCapabilities
         and BattleMaps.GetObjectiveCapabilities(self.selectedMapID)
@@ -1573,9 +1580,6 @@ function Options:Refresh()
     SetControlEnabled(self.carriedObjectiveSlider, objectiveTypes.carried)
     local trailEnabled = objectiveTypes.carried and objectiveSettings.showFlagCarrierTrail == true
     local trailStyle = objectiveSettings.carriedTrailStyle
-    local isKotmoguSelection = BattleMaps.ObjectiveRules
-        and BattleMaps.ObjectiveRules.IsTempleOfKotmoguMap
-        and BattleMaps.ObjectiveRules.IsTempleOfKotmoguMap(self.selectedMapID)
     local trailUsesHistory = trailStyle ~= "tether"
     SetControlEnabled(self.flagCarrierTrailCheck, objectiveTypes.carried)
     SetControlEnabled(self.flagTrailStyleSelector, trailEnabled)
@@ -1583,7 +1587,7 @@ function Options:Refresh()
     SetControlEnabled(self.flagTrailDurationSlider, trailEnabled and trailUsesHistory)
     SetControlEnabled(self.flagTrailSizeSlider, trailEnabled)
     SetControlEnabled(self.flagTrailDetailSlider, trailEnabled and trailUsesHistory)
-    SetControlEnabled(self.kotmoguEnemyFactionColorCheck, objectiveTypes.carried and isKotmoguSelection == true)
+    SetControlEnabled(self.carriedObjectiveColorModeDropdown, objectiveTypes.carried)
     SetControlEnabled(self.flagFlashStrengthSlider, objectiveTypes.carried and objectiveSettings.flashCarriedObjectives == true)
     SetControlEnabled(self.flagFlashPeriodSlider, objectiveTypes.carried and objectiveSettings.flashCarriedObjectives == true)
     SetControlEnabled(self.vehicleObjectiveSlider, objectiveTypes.vehicle)
@@ -1637,22 +1641,33 @@ function Options:Refresh()
         captureMapSupported and captureTimerEnabled and pulseEnabled)
 
     local notificationsEnabled = notificationSettings.enabled == true
-    SetControlEnabled(self.notificationFactionCheck, notificationsEnabled)
-    SetControlEnabled(self.notificationWorldMapBlizzardCheck, notificationsEnabled)
-    SetControlEnabled(self.notificationAnchorMode, notificationsEnabled)
-    SetControlEnabled(self.notificationMapSide, notificationsEnabled and notificationSettings.anchorMode == "MAP")
-    SetControlEnabled(self.notificationAlignment, notificationsEnabled)
-    SetControlEnabled(self.notificationX, notificationsEnabled)
-    SetControlEnabled(self.notificationY, notificationsEnabled)
-    SetControlEnabled(self.notificationScale, notificationsEnabled)
-    SetControlEnabled(self.notificationWidth, notificationsEnabled)
+    local notificationPlacementEnabled = notificationsEnabled
+        and BattleMaps.Notifications
+        and BattleMaps.Notifications.nativeFramePlacementEnabled == true
+    local notificationTextStylingEnabled = notificationsEnabled
+        and BattleMaps.Notifications
+        and (BattleMaps.Notifications.customPresentationEnabled == true
+            or BattleMaps.Notifications.nativeTextStylingEnabled == true)
+    SetControlEnabled(self.notificationFactionCheck, notificationTextStylingEnabled)
+    SetControlEnabled(self.notificationWorldMapBlizzardCheck, notificationPlacementEnabled)
+    SetControlEnabled(self.notificationAnchorMode, notificationPlacementEnabled)
+    SetControlEnabled(self.notificationMapSide, notificationPlacementEnabled and notificationSettings.anchorMode == "MAP")
+    SetControlEnabled(self.notificationAttachSide, notificationPlacementEnabled and notificationSettings.anchorMode == "MAP")
+    SetControlEnabled(self.notificationAlignment, notificationTextStylingEnabled)
+    SetControlEnabled(self.notificationX, notificationPlacementEnabled)
+    SetControlEnabled(self.notificationY, notificationPlacementEnabled)
+    SetControlEnabled(self.notificationScale, notificationPlacementEnabled)
+    SetControlEnabled(self.notificationWidth, notificationTextStylingEnabled)
 
     if self.notificationMoveButton then
-        self.notificationMoveButton:SetEnabled(notificationsEnabled)
+        self.notificationMoveButton:SetEnabled(notificationPlacementEnabled)
         self.notificationMoveButton:SetText(
             BattleMaps.Notifications and BattleMaps.Notifications.moverUnlocked
                 and "Lock Position" or "Move Notifications"
         )
+    end
+    if self.notificationPreviewButton then
+        self.notificationPreviewButton:SetEnabled(notificationPlacementEnabled)
     end
 
     self:ShowPage(self.activePage)

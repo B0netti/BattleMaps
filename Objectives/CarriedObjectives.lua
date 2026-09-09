@@ -11,6 +11,7 @@ local Rules = BattleMaps.ObjectiveRules or {}
 -- declaration point, so these must exist before live/Test Mode orb rendering.
 local GetObjectiveFactionColor
 local GetObjectiveSettings
+local GetCarriedObjectiveColorMode
 
 --[[
 BattleMaps module contract: CarriedObjectives.lua
@@ -989,7 +990,8 @@ function Pins:RefreshTempleTestCarriedOrbPreview(mapID, fromController)
     pin.texture:SetTexCoord(0, 1, 0, 1)
     local testCarrierFaction = GetOpposingFaction(GetPlayerEffectiveFaction(self)) or "horde"
     local testSettings = GetObjectiveSettings(mapID) or {}
-    local tintTestOrb = testSettings.factionColorEnemyKotmoguOrbs ~= false
+    local testColorMode = GetCarriedObjectiveColorMode(testSettings)
+    local tintTestOrb = testColorMode == "faction"
     local tintR, tintG, tintB = 1, 1, 1
     if tintTestOrb then
         tintR, tintG, tintB = GetObjectiveFactionColor(testCarrierFaction)
@@ -1040,11 +1042,17 @@ function Pins:RefreshTempleTestCarriedOrbPreview(mapID, fromController)
     end
 
     if self.RecordFlagCarrierTrailPoint then
-        local color = KOTMOGU_ORB_TRAIL_COLORS[KOTMOGU_TEST_CARRIED_COLOR]
+        local trailR, trailG, trailB
+        if testColorMode == "faction" then
+            trailR, trailG, trailB = GetObjectiveFactionColor(testCarrierFaction)
+        else
+            local color = KOTMOGU_ORB_TRAIL_COLORS[KOTMOGU_TEST_CARRIED_COLOR]
+            if color then trailR, trailG, trailB = color[1], color[2], color[3] end
+        end
         self:RecordFlagCarrierTrailPoint(
             KOTMOGU_TEST_CARRIED_INDEX, mapID, x, y,
             testCarrierFaction, pinScale,
-            color and color[1], color and color[2], color and color[3],
+            trailR, trailG, trailB,
             KOTMOGU_TEST_CARRIED_COLOR
         )
 
@@ -1135,7 +1143,6 @@ function Pins:RefreshFlags()
     local used = 0
     local maxFlagIndex = 0
     local isKotmogu = IsTempleOfKotmoguMap(mapID)
-    local playerEffectiveFaction = isKotmogu and GetPlayerEffectiveFaction(self) or nil
     local activeKotmoguOrbColors = isKotmogu and {} or nil
     local messageKotmoguOrbColors = isKotmogu
         and self.GetTempleMessageActiveOrbColors
@@ -1296,14 +1303,33 @@ function Pins:RefreshFlags()
         if pin then
             pin:SetSize(24 * pinScale, 24 * pinScale)
 
-            local flagObjectFaction = self:ResolveCarriedObjectiveFaction(mapID, texture, carriedState, index, x, y, legacyToken)
-            flagObjectFaction = ResolveEotSCarrierFaction(self, mapID, apiMapID, index, x, y, texture, carriedState, legacyToken, flagObjectFaction)
+            local resolvedFaction = self:ResolveCarriedObjectiveFaction(mapID, texture, carriedState, index, x, y, legacyToken)
+            resolvedFaction = ResolveEotSCarrierFaction(
+                self, mapID, apiMapID, index, x, y, texture, carriedState, legacyToken, resolvedFaction
+            )
+            local isCTF = isCaptureTheFlagMap and isCaptureTheFlagMap(mapID)
+            local flagObjectFaction = isCTF and resolvedFaction or nil
             local kotmoguCarrierFaction = kotmoguOrbColor
                 and self.GetTempleOrbCarrierFaction
                 and self:GetTempleOrbCarrierFaction(mapID, kotmoguOrbColor)
                 or nil
-            local carrierFaction = kotmoguCarrierFaction or flagObjectFaction
-            local isCTF = isCaptureTheFlagMap and isCaptureTheFlagMap(mapID)
+            local carrierFaction
+            if kotmoguCarrierFaction then
+                carrierFaction = kotmoguCarrierFaction
+            elseif isCTF then
+                -- In capture-the-flag maps the object faction is the flag being
+                -- carried, so the carrier necessarily belongs to the opposite
+                -- faction. Keep the two identities separate: Original colouring
+                -- follows the flag object; Carrier faction follows the player.
+                carrierFaction = GetOpposingFaction(flagObjectFaction)
+            else
+                -- EotS and other neutral carried objectives resolve to the
+                -- carrier faction when Blizzard exposes one.
+                carrierFaction = resolvedFaction
+            end
+
+            local settings = GetObjectiveSettings(mapID) or {}
+            local colorMode = GetCarriedObjectiveColorMode(settings)
             local allowCarriedEffects = not isCTF
                 or ShouldRunCTFCarriedEffects(self, mapID, index, x, y, flagObjectFaction)
             if isCTF and not allowCarriedEffects and flagObjectFaction
@@ -1311,13 +1337,19 @@ function Pins:RefreshFlags()
                 self:RememberCTFFlagBasePosition(mapID, flagObjectFaction, x, y)
             end
 
-            -- For WSG/Twin Peaks-style CTF maps, never let a neutral or
-            -- unknown inferred state select the generic custom carried flag
-            -- (flag.tga). If BattleMaps cannot prove whether the object is
-            -- the Alliance or Horde flag, preserve Blizzard's own coloured
-            -- carried-flag texture instead of replacing it with a white
-            -- neutral custom texture.
-            local customState = flagObjectFaction or carriedState
+            -- Original keeps the objective's own identity. On CTF maps that is
+            -- the Alliance/Horde flag object; on EotS it is the neutral flag.
+            -- Carrier faction deliberately swaps CTF artwork to the carrier's
+            -- faction and applies a faction tint as a robust fallback.
+            local originalState
+            if isCTF then
+                originalState = flagObjectFaction
+            elseif IsEyeOfTheStormMap(mapID) then
+                originalState = nil
+            else
+                originalState = resolvedFaction or carriedState
+            end
+            local customState = (colorMode == "faction" and carrierFaction) or originalState
             if isCTF and not flagObjectFaction then
                 customState = nil
             end
@@ -1339,26 +1371,30 @@ function Pins:RefreshFlags()
                 )
             end
 
-            -- Breadcrumbs and Glow wake preserve objective colour. Spawn
-            -- tether uses carrier faction for Kotmogu and flag-object faction
-            -- for CTF maps, so its colour matches the fixed origin it points to.
-            local trailFaction = carrierFaction
+            local fallbackTrailFaction = carrierFaction
+                or flagObjectFaction
                 or ResolveTrailFactionFromRenderedFlag(
-                    customCarried,
-                    carriedState,
-                    texture,
-                    legacyToken
+                    customCarried, carriedState, texture, legacyToken
                 )
             local trailR, trailG, trailB
-            if kotmoguOrbColor then
+            if colorMode == "faction" and carrierFaction then
+                trailR, trailG, trailB = GetObjectiveFactionColor(carrierFaction)
+            elseif kotmoguOrbColor then
                 local color = KOTMOGU_ORB_TRAIL_COLORS[kotmoguOrbColor]
                 if color then trailR, trailG, trailB = color[1], color[2], color[3] end
+            elseif isCTF and flagObjectFaction then
+                trailR, trailG, trailB = GetObjectiveFactionColor(flagObjectFaction)
+            elseif IsEyeOfTheStormMap(mapID) then
+                trailR, trailG, trailB = GetObjectiveFactionColor(nil)
+            elseif fallbackTrailFaction then
+                trailR, trailG, trailB = GetObjectiveFactionColor(fallbackTrailFaction)
             end
 
-            pin.BattleMapsObjectiveFaction = flagObjectFaction
-            pin.BattleMapsObjectiveCarrierFaction = carrierFaction or trailFaction
+            pin.BattleMapsObjectiveFaction = flagObjectFaction or resolvedFaction
+            pin.BattleMapsObjectiveCarrierFaction = carrierFaction
             pin.BattleMapsObjectiveOrbColor = kotmoguOrbColor
             pin.BattleMapsObjectiveMapID = mapID
+            pin.BattleMapsObjectiveColorMode = colorMode
             pin.BattleMapsObjectiveTexturePath = customCarried or texture or legacyToken or FALLBACK_CARRIED_FLAG_TEXTURE
             pin.BattleMapsPreviewTexturePath = nil
             pin.BattleMapsPreviewAtlas = nil
@@ -1369,21 +1405,16 @@ function Pins:RefreshFlags()
             pin.texture:SetTexture(pin.BattleMapsObjectiveTexturePath)
             pin.texture:SetTexCoord(0, 1, 0, 1)
 
-            local settings = GetObjectiveSettings(mapID) or {}
-            local tintEnemyOrb = kotmoguOrbColor
-                and settings.factionColorEnemyKotmoguOrbs ~= false
-                and carrierFaction
-                and playerEffectiveFaction
-                and carrierFaction ~= playerEffectiveFaction
+            local tintToCarrierFaction = colorMode == "faction" and carrierFaction ~= nil
             local tintR, tintG, tintB = 1, 1, 1
-            if tintEnemyOrb then
+            if tintToCarrierFaction then
                 tintR, tintG, tintB = GetObjectiveFactionColor(carrierFaction)
             end
             if pin.texture.SetDesaturated then
-                pin.texture:SetDesaturated(tintEnemyOrb == true)
+                pin.texture:SetDesaturated(tintToCarrierFaction)
             end
             pin.texture:SetVertexColor(tintR, tintG, tintB, 1)
-            pin.BattleMapsObjectiveDesaturated = tintEnemyOrb == true
+            pin.BattleMapsObjectiveDesaturated = tintToCarrierFaction
             pin.BattleMapsObjectiveTintR = tintR
             pin.BattleMapsObjectiveTintG = tintG
             pin.BattleMapsObjectiveTintB = tintB
@@ -1394,8 +1425,10 @@ function Pins:RefreshFlags()
                 if kotmoguOrbColor then
                     local label = kotmoguOrbColor:sub(1, 1):upper() .. kotmoguOrbColor:sub(2)
                     setTooltip(pin, label .. " orb carrier")
-                else
+                elseif isCTF then
                     setTooltip(pin, flagObjectFaction and ("Battleground objective: " .. flagObjectFaction .. " flag") or "Battleground objective")
+                else
+                    setTooltip(pin, "Battleground objective")
                 end
             end
             self:Place(pin, x, y)
@@ -1410,11 +1443,15 @@ function Pins:RefreshFlags()
                 end
             end
             if allowCarriedEffects and self.RecordFlagCarrierTrailPoint then
-                -- Key trail history by Blizzard's flag slot rather than the
-                -- compact rendered-pin index. This keeps the two CTF trails
-                -- separate and preserves trails for friendly carriers even if
-                -- the visible carried flag pin is later suppressed/reused.
-                self:RecordFlagCarrierTrailPoint(stableObjectiveIndex, mapID, x, y, carrierFaction or trailFaction, pinScale, trailR, trailG, trailB, kotmoguOrbColor)
+                -- point.faction retains the flag-object identity on CTF maps so
+                -- Spawn tether can find the correct flag room even when the
+                -- visible colour is switched to Carrier faction. RGB carries
+                -- the resolved display colour independently.
+                local trailOriginFaction = isCTF and flagObjectFaction or carrierFaction or fallbackTrailFaction
+                self:RecordFlagCarrierTrailPoint(
+                    stableObjectiveIndex, mapID, x, y, trailOriginFaction, pinScale,
+                    trailR, trailG, trailB, kotmoguOrbColor
+                )
             end
         end
         end
@@ -1429,6 +1466,7 @@ function Pins:RefreshFlags()
             pin.BattleMapsObjectiveFaction = nil
             pin.BattleMapsObjectiveCarrierFaction = nil
             pin.BattleMapsObjectiveOrbColor = nil
+            pin.BattleMapsObjectiveColorMode = nil
             pin.BattleMapsObjectiveDesaturated = nil
             pin.BattleMapsObjectiveTintR = nil
             pin.BattleMapsObjectiveTintG = nil
@@ -1533,6 +1571,12 @@ GetObjectiveSettings = function(mapID)
     return BattleMaps.Database and BattleMaps.Database:Get() or nil
 end
 
+GetCarriedObjectiveColorMode = function(settings)
+    local mode = settings and settings.carriedObjectiveColorMode
+    if mode == "faction" then return "faction" end
+    return "original"
+end
+
 local function GetCarriedTrailDuration(mapID)
     local db = GetObjectiveSettings(mapID)
     return BattleMaps.Clamp(tonumber(db and db.carriedTrailDuration) or FLAG_TRAIL_DEFAULT_MAX_AGE, 1.00, 30.00)
@@ -1557,9 +1601,10 @@ local function GetCarriedTrailStyle(mapID)
     local style = db and db.carriedTrailStyle
     if style == FLAG_TRAIL_STYLE_GLOW then return FLAG_TRAIL_STYLE_GLOW end
     if style == FLAG_TRAIL_STYLE_TETHER then
-        return IsTempleOfKotmoguMap(mapID)
-            and FLAG_TRAIL_STYLE_TETHER
-            or FLAG_TRAIL_STYLE_GLOW
+        local supportsTether = IsTempleOfKotmoguMap(mapID)
+            or IsEyeOfTheStormMap(mapID)
+            or (Rules.IsCaptureTheFlagMap and Rules.IsCaptureTheFlagMap(mapID))
+        return supportsTether and FLAG_TRAIL_STYLE_TETHER or FLAG_TRAIL_STYLE_GLOW
     end
     return FLAG_TRAIL_STYLE_BREADCRUMBS
 end
@@ -2063,21 +2108,20 @@ end
 
 local function ConfigureSpawnTetherLine(pair, startFrame, endFrame, point, mapID, pins, flashLevel)
     if not pair or not pair.core then return false end
-    local faction = NormalizeTrailFactionValue(point and point.faction)
-    local r, g, b = GetObjectiveFactionColor(faction)
+    local r, g, b = ResolveTrailPointColor(point)
     local baseSize = GetTrailBaseSize(pins, mapID)
     local glow = EnsureFlagTrailGlow(pins, pair)
     local pulse = flashLevel and (0.86 + (0.28 * flashLevel)) or 1
-    local thickness = BattleMaps.Clamp(baseSize * 0.42, 1.75, 12.0)
-    local alpha = BattleMaps.Clamp(0.52 * pulse, 0.38, 0.82)
+    local thickness = BattleMaps.Clamp(baseSize * 0.54, 2.10, 14.0)
+    local alpha = BattleMaps.Clamp(0.66 * pulse, 0.48, 0.92)
 
     if glow then
         glow:ClearAllPoints()
         glow:SetStartPoint("CENTER", startFrame, 0, 0)
         glow:SetEndPoint("CENTER", endFrame, 0, 0)
-        glow:SetThickness(BattleMaps.Clamp(thickness * 2.35, thickness + 2, 26))
+        glow:SetThickness(BattleMaps.Clamp(thickness * 2.55, thickness + 2, 30))
         if glow.SetBlendMode then glow:SetBlendMode("ADD") end
-        glow:SetColorTexture(r, g, b, BattleMaps.Clamp(alpha * 0.22, 0.08, 0.22))
+        glow:SetColorTexture(r, g, b, BattleMaps.Clamp(alpha * 0.30, 0.12, 0.30))
         glow:Show()
     end
 
@@ -2089,6 +2133,96 @@ local function ConfigureSpawnTetherLine(pair, startFrame, endFrame, point, mapID
     pair.core:SetColorTexture(r, g, b, alpha)
     pair.core:Show()
     return true
+end
+
+local function ShowTrailViewportAnchor(frame, mapFrame, screenX, screenY)
+    if not frame or not mapFrame or not mapFrame.viewport then return false end
+    if frame.texture then frame.texture:Hide() end
+    if frame.glowTexture then frame.glowTexture:Hide() end
+    frame:SetSize(1, 1)
+    frame:ClearAllPoints()
+    frame:SetPoint("CENTER", mapFrame.viewport, "TOPLEFT", screenX, -screenY)
+    frame:Show()
+    return true
+end
+
+local function ConfigureTetherArrowSegment(pair, startFrame, endFrame, r, g, b, thickness, alpha)
+    if not pair or not pair.core or not startFrame or not endFrame then return false end
+    if pair.glow then pair.glow:Hide() end
+    pair.core:ClearAllPoints()
+    pair.core:SetStartPoint("CENTER", startFrame, 0, 0)
+    pair.core:SetEndPoint("CENTER", endFrame, 0, 0)
+    pair.core:SetThickness(thickness)
+    if pair.core.SetBlendMode then pair.core:SetBlendMode("ADD") end
+    pair.core:SetColorTexture(r, g, b, alpha)
+    pair.core:Show()
+    return true
+end
+
+local function RenderKotmoguTetherArrows(pins, mapID, spawnX, spawnY, point, usedAnchors, usedLines, flashLevel)
+    if not IsTempleOfKotmoguMap(mapID) or not point then return usedAnchors, usedLines end
+    local mapFrame = BattleMaps.MapFrame
+    if not mapFrame or type(mapFrame.MapToViewport) ~= "function" then return usedAnchors, usedLines end
+
+    local startX, startY = mapFrame:MapToViewport(spawnX, spawnY)
+    local endX, endY = mapFrame:MapToViewport(point.x, point.y)
+    if not startX or not startY or not endX or not endY then return usedAnchors, usedLines end
+
+    local dx, dy = endX - startX, endY - startY
+    local distance = math.sqrt((dx * dx) + (dy * dy))
+    if distance < 24 then return usedAnchors, usedLines end
+
+    local ux, uy = dx / distance, dy / distance
+    local px, py = -uy, ux
+    local baseSize = GetTrailBaseSize(pins, mapID)
+    local arrowCount = math.floor(distance / 58)
+    arrowCount = math.max(1, math.min(5, arrowCount))
+    local arrowLength = BattleMaps.Clamp(baseSize * 0.62, 5.5, 11.0)
+    local halfWidth = BattleMaps.Clamp(baseSize * 0.34, 3.0, 6.5)
+    local thickness = BattleMaps.Clamp(baseSize * 0.20, 1.35, 4.0)
+    local r, g, b = ResolveTrailPointColor(point)
+    local pulse = flashLevel and (0.92 + (0.20 * flashLevel)) or 1
+    local alpha = BattleMaps.Clamp(0.88 * pulse, 0.72, 1.00)
+
+    for index = 1, arrowCount do
+        if usedAnchors + 3 > FLAG_TRAIL_MAX_TOTAL_POINTS then break end
+        local t = index / (arrowCount + 1)
+        local tipX = startX + (dx * t)
+        local tipY = startY + (dy * t)
+        local baseX = tipX - (ux * arrowLength)
+        local baseY = tipY - (uy * arrowLength)
+        local leftX = baseX + (px * halfWidth)
+        local leftY = baseY + (py * halfWidth)
+        local rightX = baseX - (px * halfWidth)
+        local rightY = baseY - (py * halfWidth)
+
+        usedAnchors = usedAnchors + 1
+        local tipFrame = pins:GetFlagTrailFrame(usedAnchors)
+        ShowTrailViewportAnchor(tipFrame, mapFrame, tipX, tipY)
+        usedAnchors = usedAnchors + 1
+        local leftFrame = pins:GetFlagTrailFrame(usedAnchors)
+        ShowTrailViewportAnchor(leftFrame, mapFrame, leftX, leftY)
+        usedAnchors = usedAnchors + 1
+        local rightFrame = pins:GetFlagTrailFrame(usedAnchors)
+        ShowTrailViewportAnchor(rightFrame, mapFrame, rightX, rightY)
+
+        usedLines = usedLines + 1
+        ConfigureTetherArrowSegment(
+            pins:GetFlagTrailLine(usedLines),
+            leftFrame,
+            tipFrame,
+            r, g, b, thickness, alpha
+        )
+        usedLines = usedLines + 1
+        ConfigureTetherArrowSegment(
+            pins:GetFlagTrailLine(usedLines),
+            rightFrame,
+            tipFrame,
+            r, g, b, thickness, alpha
+        )
+    end
+
+    return usedAnchors, usedLines
 end
 
 function Pins:RecordFlagCarrierTrailPoint(flagIndex, mapID, x, y, faction, pinScale, r, g, b, colorKey)
@@ -2350,6 +2484,18 @@ function Pins:RenderFlagCarrierTrails(activeFlagCount, forceRender)
                         point,
                         entry.mapID,
                         self,
+                        flashLevel
+                    )
+                end
+                if IsTempleOfKotmoguMap(entry.mapID) then
+                    usedAnchors, usedLines = RenderKotmoguTetherArrows(
+                        self,
+                        entry.mapID,
+                        spawnX,
+                        spawnY,
+                        point,
+                        usedAnchors,
+                        usedLines,
                         flashLevel
                     )
                 end

@@ -19,26 +19,6 @@ local function ApplyFovPresetPresentation()
     if BattleMaps.MapFrame then BattleMaps.MapFrame:ApplyVisualSettings() end
 end
 
-local function MakeInformationButton(parent, x, y, title, description)
-    local button = CreateFrame("Button", nil, parent)
-    button:SetSize(20, 20)
-    button:SetPoint("TOPLEFT", parent, "TOPLEFT", x, y)
-
-    local ring = button:CreateTexture(nil, "BACKGROUND")
-    ring:SetAllPoints()
-    ring:SetTexture("Interface\\Buttons\\UI-Quickslot2")
-    ring:SetVertexColor(0.88, 0.58, 0.22, 0.95)
-
-    local text = button:CreateFontString(nil, "ARTWORK", "GameFontNormalSmall")
-    text:SetPoint("CENTER", button, "CENTER", 0, 0)
-    text:SetText("i")
-    text:SetTextColor(1.00, 0.84, 0.45, 1)
-    button.iconText = text
-
-    AddControlTooltip(button, title, description)
-    return button
-end
-
 function Options:CreateUnitsPage(parent)
     local db = BattleMaps.Database:Get()
     local playerPanelHeight = 160
@@ -200,7 +180,10 @@ function Options:CreateUnitsPage(parent)
         function() return tonumber(self:GetUnitsTarget().healerPinSize) or 16 end,
         function(value)
             self:GetUnitsTarget().healerPinSize = value
-            if BattleMaps.Pins then BattleMaps.Pins:RefreshGroup() end
+            if BattleMaps.Pins then
+                BattleMaps.Pins.unitHealerSize = nil
+                BattleMaps.Pins:RefreshGroup()
+            end
         end,
         function(value) return string.format("%d%%", math.floor(((value / 16) * 100) + 0.5)) end,
         160)
@@ -222,7 +205,10 @@ function Options:CreateUnitsPage(parent)
                 icon = true,
                 ignore = true,
             })[value] and value or "icon"
-            if BattleMaps.Pins then BattleMaps.Pins:RefreshGroup() end
+            if BattleMaps.Pins then
+                BattleMaps.Pins.unitHealerPinStyle = nil
+                BattleMaps.Pins:RefreshGroup()
+            end
         end,
         false)
     AddControlTooltip(self.healerPinStyleDropdown, "Healer icon style",
@@ -250,14 +236,7 @@ function Options:CreateUnitsPage(parent)
     AddControlTooltip(self.healerIconCustomColorControl, "Healer icon color",
         "Click the color swatch to choose the healer cross/icon color. Class colours each healer icon using that healer's own class; the shared swatch stays neutral because a group can contain multiple healer classes.")
 
-    local stacking = MakePanel(page, "Team Pin Stacking", 0, stackingPanelY, 684, 118)
-    self.teamStackInfoButton = MakeInformationButton(
-        stacking,
-        142,
-        -5,
-        "Approximate live-PvP stacking",
-        "Blizzard restricts exact teammate coordinates during active battlegrounds. BattleMaps therefore uses small, bounded offsets based on stable roster slots rather than exact proximity calculations. This keeps pins close to Blizzard's native positions, but isolated pins can move slightly and the result is approximate. The feature remains experimental. Test mode demonstrates this same bounded-offset behaviour."
-    )
+    local stacking = MakePanel(page, "Team Pin Stacking", 0, stackingPanelY, 684, 92)
 
     self.teamPinStackCheck = MakeCheckbox(stacking, "Enable", 10, -30,
         function() return self:GetUnitsTarget().stackTeamPins ~= false end,
@@ -267,9 +246,9 @@ function Options:CreateUnitsPage(parent)
             if BattleMaps.Pins then BattleMaps.Pins:RefreshGroup() end
         end)
     AddControlTooltip(self.teamPinStackCheck, "Enable team pin stacking",
-        "Applies small, bounded offsets to friendly team pins. In live PvP this is an approximate separation system because Blizzard does not expose exact teammate coordinates to addon Lua.")
+        "Applies small, bounded offsets to friendly team pins. The same stacking behaviour is used in Test Mode and live battlegrounds.")
 
-    self.excludePlayerArrowFromStackCheck = MakeCheckbox(stacking, "Exclude player pin", 10, -78,
+    self.excludePlayerArrowFromStackCheck = MakeCheckbox(stacking, "Exclude player pin", 10, -60,
         function() return self:GetUnitsTarget().excludePlayerArrowFromStack == true end,
         function(value)
             self:GetUnitsTarget().excludePlayerArrowFromStack = value
@@ -279,7 +258,7 @@ function Options:CreateUnitsPage(parent)
         "Keeps the player pin out of the separation pattern. The pin remains fixed and renders behind team pins so overlaps stay readable.")
 
     self.teamPinStackOverlapSlider = MakeSlider(stacking, "Pin overlap", 210, -30, 0, 80, 5,
-        function() return tonumber(self:GetUnitsTarget().teamPinStackOverlap) or 45 end,
+        function() return tonumber(self:GetUnitsTarget().teamPinStackOverlap) or 30 end,
         function(value)
             self:GetUnitsTarget().teamPinStackOverlap = value
             if BattleMaps.Pins then BattleMaps.Pins:RefreshGroup() end
@@ -287,27 +266,11 @@ function Options:CreateUnitsPage(parent)
         function(value) return string.format("%d%%", value) end,
         250)
     AddControlTooltip(self.teamPinStackOverlapSlider, "Pin overlap",
-        "Controls how much the bounded separation offsets overlap. Higher values keep pins closer together; lower values spread them farther apart within the safety cap.")
+        "Controls the strength of the bounded team-pin spread. Higher values keep pins closer to Blizzard's true positions; lower values spread the roster farther apart.")
 
-    self.teamPinStackDirectionDropdown = MakeDropdown(stacking, "Direction", 500, -30, 160,
-        function()
-            return {
-                { value = "compact", label = "Compact" },
-                { value = "diagonal", label = "Diagonal" },
-                { value = "horizontal", label = "Horizontal" },
-                { value = "vertical", label = "Vertical" },
-            }
-        end,
-        function() return self:GetUnitsTarget().teamPinStackDirection or "compact" end,
-        function(value)
-            self:GetUnitsTarget().teamPinStackDirection = value
-            if BattleMaps.Pins then BattleMaps.Pins:RefreshGroup() end
-        end,
-        true)
-    AddControlTooltip(self.teamPinStackDirectionDropdown, "Direction",
-        "Controls the visual offset pattern used for the approximate separation.")
+
 end
 
 if Options.RegisterPage then
-    Options:RegisterPage("units", "Units", 700, "CreateUnitsPage", 20)
+    Options:RegisterPage("units", "Units", 680, "CreateUnitsPage", 20)
 end

@@ -27,6 +27,18 @@ local MAP_CANVAS_LEVEL_OFFSET = 10
 local FOV_OVERLAY_LAYER_LEVEL_OFFSET = 15
 local PIN_LAYER_LEVEL_OFFSET = 20
 
+local function SizeLockButtonArtwork(button)
+    if not button then return end
+    -- Blizzard's lock textures contain substantially more transparent padding
+    -- than UIPanelCloseButton's X. Crop only that padding so both controls have
+    -- a similar visible weight while retaining the same 32px click target.
+    for _, texture in ipairs({ button:GetNormalTexture(), button:GetPushedTexture() }) do
+        if texture then
+            texture:SetTexCoord(0.14, 0.86, 0.14, 0.86)
+        end
+    end
+end
+
 -- These are deliberately an alignment aid only. A MaskTexture follows the
 -- transformed FoV texture rather than this map canvas, so it cannot provide a
 -- fixed world-space clip without distorting the rotating cone.
@@ -252,9 +264,11 @@ function MapFrame:Create()
 
     local titleBar = CreateFrame("Frame", nil, frame, GetTemplate())
     self.titleBar = titleBar
-    titleBar:SetPoint("TOPLEFT", frame, "TOPLEFT", 2, -2)
-    titleBar:SetPoint("TOPRIGHT", frame, "TOPRIGHT", -2, -2)
-    titleBar:SetHeight(25)
+    -- The controls live outside the map viewport. Revealing the header must
+    -- never reserve space inside the map or cause the artwork to jump.
+    titleBar:SetPoint("BOTTOMLEFT", frame, "TOPLEFT", 0, 2)
+    titleBar:SetPoint("BOTTOMRIGHT", frame, "TOPRIGHT", 0, 2)
+    titleBar:SetHeight(32)
     titleBar:EnableMouse(true)
     if titleBar.SetBackdrop then
         titleBar:SetBackdrop({ bgFile = "Interface\\Buttons\\WHITE8X8" })
@@ -265,34 +279,56 @@ function MapFrame:Create()
     self.closeButton = close
     close:SetPoint("RIGHT", titleBar, "RIGHT", 2, 0)
     close:SetScript("OnClick", function()
-        self:CancelEdit()
         frame:Hide()
     end)
 
-    local saveButton = CreateFrame("Button", nil, titleBar, "UIPanelButtonTemplate")
-    self.saveButton = saveButton
-    saveButton:SetSize(52, 18)
-    saveButton:SetPoint("RIGHT", close, "LEFT", 0, 0)
-    saveButton:SetText("Save")
-    saveButton:SetScript("OnClick", function()
-        self:CommitEdit()
-    end)
-
-    local editButton = CreateFrame("Button", nil, titleBar, "UIPanelButtonTemplate")
-    self.lockButton = editButton
-    editButton:SetSize(52, 18)
-    editButton:SetPoint("RIGHT", saveButton, "LEFT", -2, 0)
-    editButton:SetText("Edit")
-    editButton:SetScript("OnClick", function()
-        if not self.editMode then
+    local lockButton = CreateFrame("Button", nil, titleBar)
+    self.lockButton = lockButton
+    -- Match Blizzard's close-button footprint exactly. The lock artwork has
+    -- more transparent padding than the X texture, so using the same physical
+    -- button size keeps the two title-bar controls visually balanced.
+    local closeWidth, closeHeight = close:GetSize()
+    lockButton:SetSize(
+        (closeWidth and closeWidth > 0) and closeWidth or 32,
+        (closeHeight and closeHeight > 0) and closeHeight or 32
+    )
+    lockButton:SetPoint("RIGHT", close, "LEFT", -1, 0)
+    lockButton:SetNormalTexture("Interface\\Buttons\\LockButton-Locked-Up")
+    lockButton:SetPushedTexture("Interface\\Buttons\\LockButton-Locked-Down")
+    SizeLockButtonArtwork(lockButton)
+    lockButton:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square", "ADD")
+    lockButton:SetScript("OnClick", function(button)
+        if self.editMode then
+            self:CommitEdit()
+        else
             self:BeginEdit()
+        end
+        -- Refresh the action tooltip immediately after the state changes.
+        local onEnter = button:GetScript("OnEnter")
+        if button:IsMouseOver() and onEnter then onEnter(button) end
+    end)
+    lockButton:SetScript("OnEnter", function(button)
+        if not GameTooltip then return end
+        GameTooltip:SetOwner(button, "ANCHOR_BOTTOMLEFT")
+        if self.editMode then
+            GameTooltip:SetText("Lock map layout")
+            GameTooltip:AddLine("Save the current size, position, pan, and zoom.", 1, 1, 1, true)
+        else
+            GameTooltip:SetText("Unlock map layout")
+            GameTooltip:AddLine("Enable persistent map layout editing.", 1, 1, 1, true)
+        end
+        GameTooltip:Show()
+    end)
+    lockButton:SetScript("OnLeave", function(button)
+        if GameTooltip and GameTooltip:GetOwner() == button then
+            GameTooltip:Hide()
         end
     end)
 
     local title = titleBar:CreateFontString(nil, "OVERLAY", "GameFontNormal")
     self.title = title
     title:SetPoint("LEFT", titleBar, "LEFT", 9, 0)
-    title:SetPoint("RIGHT", editButton, "LEFT", -8, 0)
+    title:SetPoint("RIGHT", lockButton, "LEFT", -8, 0)
     title:SetJustifyH("LEFT")
     if title.SetWordWrap then title:SetWordWrap(false) end
     if title.SetNonSpaceWrap then title:SetNonSpaceWrap(false) end
@@ -312,7 +348,7 @@ function MapFrame:Create()
 
     local viewport = CreateFrame("Frame", nil, frame)
     self.viewport = viewport
-    viewport:SetPoint("TOPLEFT", frame, "TOPLEFT", 3, -29)
+    viewport:SetPoint("TOPLEFT", frame, "TOPLEFT", 3, -3)
     viewport:SetPoint("BOTTOMRIGHT", frame, "BOTTOMRIGHT", -3, 3)
     viewport:EnableMouse(true)
     viewport:EnableMouseWheel(true)
@@ -471,7 +507,7 @@ function MapFrame:Create()
         if BattleMaps.Pins and BattleMaps.Pins.StopCaptureTimerTest then
             BattleMaps.Pins:StopCaptureTimerTest()
         end
-        self:CancelEdit()
+        if self.editMode then self:CancelEdit() end
         if not self.worldMapMode then
             self.transientView = nil
             self.transientViewMapID = nil
@@ -501,7 +537,7 @@ function MapFrame:UpdateTitleText(mapID)
     self.title:SetText(battle .. maps .. suffix)
 end
 
-function MapFrame:UpdateViewportChromeInset(chromeAlpha, force)
+function MapFrame:UpdateViewportChromeInset(_, force)
     if not self.frame or not self.viewport then return end
 
     if self.worldMapMode then
@@ -514,21 +550,16 @@ function MapFrame:UpdateViewportChromeInset(chromeAlpha, force)
         return
     end
 
+    -- The hover header now sits above the map frame instead of consuming map
+    -- space. The viewport therefore has a stable inset regardless of header
+    -- alpha, eliminating the visible jump/reflow on mouseover.
     local inset = tonumber(self.visualInset) or 2
-    -- Quantise to whole pixels so the expensive map layout is not rebuilt for
-    -- imperceptibly small alpha changes on every frame of the fade.
-    local reservedHeaderHeight = math.floor((26 * BattleMaps.Clamp(chromeAlpha or 0, 0, 1)) + 0.5)
-    if not force and self.reservedHeaderHeight == reservedHeaderHeight then return end
-    self.reservedHeaderHeight = reservedHeaderHeight
+    if not force and self.reservedHeaderHeight == 0 and self.viewportInset == inset then return end
+    self.reservedHeaderHeight = 0
+    self.viewportInset = inset
 
     self.viewport:ClearAllPoints()
-    self.viewport:SetPoint(
-        "TOPLEFT",
-        self.frame,
-        "TOPLEFT",
-        inset + 1,
-        -(inset + 1 + reservedHeaderHeight)
-    )
+    self.viewport:SetPoint("TOPLEFT", self.frame, "TOPLEFT", inset + 1, -(inset + 1))
     self.viewport:SetPoint("BOTTOMRIGHT", self.frame, "BOTTOMRIGHT", -(inset + 1), inset + 1)
     self:LayoutView()
 end
@@ -567,8 +598,8 @@ function MapFrame:ApplyVisualSettings()
     self.titleBar:Show()
 
     self.titleBar:ClearAllPoints()
-    self.titleBar:SetPoint("TOPLEFT", self.frame, "TOPLEFT", inset, -inset)
-    self.titleBar:SetPoint("TOPRIGHT", self.frame, "TOPRIGHT", -inset, -inset)
+    self.titleBar:SetPoint("BOTTOMLEFT", self.frame, "TOPLEFT", 0, 2)
+    self.titleBar:SetPoint("BOTTOMRIGHT", self.frame, "TOPRIGHT", 0, 2)
 
     self.resizeHandle:ClearAllPoints()
     self.resizeHandle:SetPoint("BOTTOMRIGHT", self.frame, "BOTTOMRIGHT", -inset, inset)
@@ -605,13 +636,22 @@ end
 
 function MapFrame:IsPointerOverFrame()
     if not self.frame or not self.frame:IsShown() then return false end
-    if type(MouseIsOver) == "function" then
-        local ok, over = pcall(MouseIsOver, self.frame)
-        if ok then return over == true end
-    end
-    if self.frame.IsMouseOver then
-        local ok, over = pcall(self.frame.IsMouseOver, self.frame)
-        if ok then return over == true end
+
+    -- The header is intentionally outside the map rectangle, so count it as
+    -- part of the hover target or it would fade while the pointer moves from
+    -- the map onto the Lock/close controls.
+    local candidates = { self.frame, self.titleBar }
+    for _, candidate in ipairs(candidates) do
+        if candidate and candidate.IsShown and candidate:IsShown() then
+            if type(MouseIsOver) == "function" then
+                local ok, over = pcall(MouseIsOver, candidate)
+                if ok and over == true then return true end
+            end
+            if candidate.IsMouseOver then
+                local ok, over = pcall(candidate.IsMouseOver, candidate)
+                if ok and over == true then return true end
+            end
+        end
     end
     return false
 end
@@ -622,7 +662,6 @@ function MapFrame:SetChromeInteractive(enabled)
     self.chromeInteractive = enabled
     if self.titleBar then self.titleBar:EnableMouse(enabled) end
     if self.closeButton then self.closeButton:EnableMouse(enabled) end
-    if self.saveButton then self.saveButton:EnableMouse(enabled) end
     if self.lockButton then self.lockButton:EnableMouse(enabled) end
 end
 
@@ -798,10 +837,13 @@ function MapFrame:GetContextMenuItems()
     return {
         { text = "Options", action = OpenOptions },
         {
-            text = "Save",
-            disabled = self.editMode ~= true,
+            text = self.editMode and "Lock Layout" or "Unlock Layout",
             action = function()
-                if self.editMode then self:CommitEdit() end
+                if self.editMode then
+                    self:CommitEdit()
+                else
+                    self:BeginEdit()
+                end
             end,
         },
         { text = "Cancel", action = DismissMenu },
@@ -1354,10 +1396,10 @@ function MapFrame:SetTestMode(enabled)
     end
 end
 
--- A live battleground transition is authoritative. If the user was editing a
--- different preview map when the queue entered, cancel that map's snapshot,
--- switch to the real battleground, and begin a fresh edit snapshot there. This
--- does not change frame visibility; the caller retains normal auto-show rules.
+-- A live battleground transition is authoritative. If the user had a preview
+-- map unlocked when the queue entered, discard that unconfirmed edit, switch
+-- to the real battleground, and resume the unlocked state there. This does not
+-- change frame visibility; the caller retains normal auto-show rules.
 function MapFrame:SetLiveBattleground(mapID, preserveEditMode)
     mapID = tonumber(mapID)
     if not mapID then return false end
@@ -1509,23 +1551,21 @@ function MapFrame:SetEditMode(enabled)
     self.resizeHandle:SetShown(self.editMode)
     self.editBorder:SetShown(self.editMode)
     self.hint:SetShown(self.editMode)
-    self.saveButton:SetShown(self.editMode)
 
     self.lockButton:ClearAllPoints()
+    self.lockButton:SetPoint("RIGHT", self.closeButton, "LEFT", -1, 0)
+    self.lockButton:SetEnabled(true)
     if self.editMode then
-        self.lockButton:SetPoint("RIGHT", self.saveButton, "LEFT", -2, 0)
+        -- Open padlock = the map layout is currently unlocked/editable.
+        self.lockButton:SetNormalTexture("Interface\\Buttons\\LockButton-Unlocked-Up")
+        self.lockButton:SetPushedTexture("Interface\\Buttons\\LockButton-Unlocked-Down")
     else
-        self.lockButton:SetPoint("RIGHT", self.closeButton, "LEFT", 0, 0)
-    end
-
-    self.lockButton:SetEnabled(not self.editMode)
-    self.lockButton:SetText(self.editMode and "Editing" or "Edit")
-    if self.editMode then
-        self.lockButton:LockHighlight()
-    else
-        self.lockButton:UnlockHighlight()
+        -- Closed padlock = the saved map layout is currently protected.
+        self.lockButton:SetNormalTexture("Interface\\Buttons\\LockButton-Locked-Up")
+        self.lockButton:SetPushedTexture("Interface\\Buttons\\LockButton-Locked-Down")
         self.chromeRequested = false
     end
+    SizeLockButtonArtwork(self.lockButton)
     self:UpdateChromeFade(0, true)
 end
 

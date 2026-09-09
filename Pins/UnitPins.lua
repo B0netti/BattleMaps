@@ -17,14 +17,6 @@ local CUSTOM_HEALER_CROSS_TEXTURE = "Interface\\AddOns\\BattleMaps\\Media\\heale
 local CUSTOM_HEALER_CROSS_BORDER_TEXTURE = "Interface\\AddOns\\BattleMaps\\Media\\healer_cross_border.tga"
 local CUSTOM_HEALER_COMBAT_CROSS_TEXTURE = "Interface\\AddOns\\BattleMaps\\Media\\healer_cross_combat.tga"
 
--- The three layers are all authored on 64 px canvases, but their visible
--- diameters differ because each has its own transparent padding. These ratios
--- let the standalone healer background reproduce the rim thickness created by
--- the normal team border/fill pair at every map zoom and border-size setting.
-local TEAM_PIN_VISIBLE_DIAMETER = 55
-local HEALER_CROSS_VISIBLE_DIAMETER = 38
-local HEALER_ICON_ONLY_BORDER_VISIBLE_DIAMETER = 60
-
 -- Previous single-layer media remain as graceful fallbacks while users replace
 -- files or when one of the new layered assets is absent.
 local CUSTOM_TEAM_PIN_TEXTURE = "Interface\\AddOns\\BattleMaps\\Media\\team_circle_dot.tga"
@@ -39,13 +31,12 @@ local PLAYER_FOV_LAYER_TEXTURES = {
     -- Keep these names map-independent: map-specific shaping belongs in masks.
     core = "Interface\\AddOns\\BattleMaps\\Media\\FoV\\Layers\\fov_core.tga",
     terrain = "Interface\\AddOns\\BattleMaps\\Media\\FoV\\Layers\\fov_terrain.tga",
-    proximity = "Interface\\AddOns\\BattleMaps\\Media\\FoV\\Layers\\fov_proximity.tga",
 }
 
 local PLAYER_FOV_STYLES = {
-    -- The renderer still uses its proven under/arc/beam frame slots so live BG
-    -- positioning and rotation remain unchanged. maskKind now describes the
-    -- semantic role of each pass: core, terrain, or proximity.
+    -- The renderer uses its proven under/beam frame slots so live BG positioning
+    -- and rotation remain unchanged. maskKind describes the semantic role of
+    -- each pass: core or terrain.
     simple = {
         under = {
             texture = "Interface\\AddOns\\BattleMaps\\Media\\fov_cone_simple.tga",
@@ -68,20 +59,11 @@ local PLAYER_FOV_STYLES = {
             alphaSetting = "playerFovBeamAlpha",
             maskKind = "terrain",
         },
-        arc = {
-            texture = "Interface\\AddOns\\BattleMaps\\Media\\fov_accent_wispy.tga",
-            blendMode = "ADD",
-            aspect = 1,
-            alphaMultiplier = 0.10,
-            maskKind = "proximity",
-        },
     },
     sunbeam = {
-        -- Preserve the existing Sunbeam presentation exactly while replacing
-        -- its authored files with semantic layer roles:
+        -- Sunbeam uses the two retained semantic layer roles:
         --   core      = BLEND, main FoV alpha
-        --   terrain   = ADD, main FoV alpha * Beam alpha
-        --   proximity = ADD, main FoV alpha * 0.10
+        --   terrain = ADD, main FoV alpha * Beam alpha
         under = {
             texture = PLAYER_FOV_LAYER_TEXTURES.core,
             blendMode = "BLEND",
@@ -95,27 +77,22 @@ local PLAYER_FOV_STYLES = {
             alphaSetting = "playerFovBeamAlpha",
             maskKind = "terrain",
         },
-        arc = {
-            texture = PLAYER_FOV_LAYER_TEXTURES.proximity,
-            blendMode = "ADD",
-            aspect = 1,
-            alphaMultiplier = 0.10,
-            maskKind = "proximity",
-        },
     },
 }
-local PLAYER_FOV_LAYER_ORDER = { "under", "arc", "beam" }
+local PLAYER_FOV_LAYER_ORDER = { "under", "beam" }
 
 -- Map-space masks are keyed by semantic layer role. Every supported non-epic
--- battleground follows the same core/terrain/proximity contract. Keeping the
+-- battleground follows the same core/terrain contract. Keeping the
 -- folder name separate from the numeric aliases makes it straightforward to
 -- author a map once even when Blizzard exposes more than one ID for it.
 local function BuildPlayerFovMaskSet(folder)
     local root = "Interface\\AddOns\\BattleMaps\\Media\\FoV\\Masks\\" .. folder .. "\\"
     return {
-        core = root .. "core_mask.tga",
-        terrain = root .. "terrain_mask.tga",
-        proximity = root .. "proximity_mask.tga",
+        -- Test Mode consumes the generated rectangle-union assets so its mask
+        -- boundary is identical to the compiled live geometry. The unsuffixed
+        -- files remain the editable authoring inputs.
+        core = root .. "core_mask_live.tga",
+        terrain = root .. "terrain_mask_live.tga",
     }
 end
 
@@ -174,54 +151,44 @@ local PLAYER_FOV_LIVE_MASK_FULL_RECTANGLES = {
 }
 local PLAYER_FOV_LIVE_MASK_GEOMETRY_SOURCE = {
     ArathiBasin = {
-        core = "64x43:j521h681h7b1h8d1w861h9n1hao2icm2jel1kfl7lmk1lnl1mol2mqm1mr51srh1usf1ytb1zua1Av91",
-        terrain = "40x27:e421e531d611g621b711h711a811d921da31db21q913fc11qc21nc12bd12he11rd12bf21if21ig41cg12lh51ci51mi31ej21hj41nj11lk11",
-        proximity = "empty",
+        core = "64x43:g481g591g6c2g8p6kel3khm4lll2lnm2lpo4vte2yvb2",
+        terrain = "64x43:d1A6d7k1d8j1D7a2F982d9i3dck2del1Gb74dff1xf21Ff81xgg1yhf1dge3mj51ok41pl41zie4qm41ymf1rnm1dj79ds81ps21tok5dtA7",
     },
     BattleForGilneas = {
         core = "64x43:u4d1q5j1n6n1l7p1k8p1i9q1har2gcs1gdt1gev1gfx2ghy1gix1gju1gks1hlr4ipr2irs1hsu1gtv1euy1dvz1cwA2cyz1dzy1dAw1fBr1gCo1iDm1mEb1zE41",
         terrain = "full",
-        proximity = "full",
     },
     DeephaulRavine = {
         core = "64x43:e9a18ao16br16cs27er27gt17hv17ix16jA15kD25m71gmt16n21gnu1gov1hpv1oqq1prs1qst1rtt1rus2swo1vxk1xyh1yzg1AAc1CB41HB11",
         terrain = "full",
-        proximity = "full",
     },
     DeepwindGorge = {
         core = "48x32:f141e271v241d3b1u361d4f1t481e5n1e6o1b7r188u179w16ax16by16cz15dA15eB15fC26hB18iz19jy1akx2cmu1cnt1cor1cpo2crn1es21msd1ot31st61",
         terrain = "24x16:7131f121a211f2319311c311g3314412a5313611b6217514a811k712b911g921j9215a31ba316b31cb11ha42hc216c72ce21",
-        proximity = "full",
     },
     EyeOfTheStorm = {
         core = "64x43:s861q991paa1pbb3pec2pgd1ohe2ojd1pk81tl41tm51sn91ooe1npf1oqe2psd1ptc1qub2qwa1rx91sy71",
         terrain = "64x43:r781p8b1o9c1oad1nbe2ndf2nfg1ngh4mki7nrg3ouf1ove2pxd1pyc1qza1rA71",
-        proximity = "full",
     },
     SeethingShore = {
         core = "64x43:m621v651M691k7l1K7c1i8E1g9F1gaG2ecI1cdK1beL3bhM2ajN19kO4aoN29qN2asM1dtJ1euH2ewI2ey71fz51nyz2oAx2rCs1",
         terrain = "32x21:8141h141o16162o153k144i135h126j127a1f761289119910a91ca312b61bb51ib41ac51jc213c52ad313ea24ga25i919j51bk31",
-        proximity = "full",
     },
     SilvershardMines = {
         core = "64x43:g3p1f4r1J471f5D2f7E2f9D1eaD1ebC1ecB1ddB1ceC1afE18gF17hG16iH16jG27lF28nE19oD1apC1dqA1frz1gsz1htz6hzy2hBx1hCj1FC71iDf1HD31jEc1kF91",
         terrain = "40x27:i341h461f5c1t521d6j1c7j1a8l189n16ao15b71ibc15c61icb15d51hdc17e21ged1ffa1eg91rf22eh81qh31qi41ei43dl51pj53qm31cm62rn11co51dp21",
-        proximity = "full",
     },
     TempleOfKotmogu = {
         core = "64x43:q971mag1kbo1ics1gdv1gew1ffy16f42fgz1Pg416h51ehG16iO55nP15oQ26q61dqI17r31Qr41Rs21erz6fxx2izs1mA61vA81",
         terrain = "24x16:8221d211d3525363c561m51126215631b611f641l6211772e7922961f9812a115a41aa31fa31ka31cb615b62dc516d41dd618e21he11",
-        proximity = "full",
     },
     TwinPeaks = {
         core = "64x43:v341t4b1s5e1r6f1r7g1q8h2qag1pbh1och3nfi1ogh2oii1pjh2oli4npj3nsi2ouh1pvg1pwh3qzg1qAf1rBd1tC81",
         terrain = "40x27:g021d111f171c2b1d3a1d492e681f771p721f8c2fab1fb81fc71ed61qd31be71oe51bf61mf71cg51kg81eh31ei41kh72fj21kj11gk11pj22ol31nm52po31",
-        proximity = "full",
     },
     WarsongGulch = {
         core = "64x43:s091s1a1r2b2q4c1q5d1p6e1o7g1o8h1n9j1mak1lbm1lcn1mdm3mgn6lmo3lpn3msl2nuj2nwi1nxh2nzg1nAf1nBe2oDc1tE61",
         terrain = "64x43:Ca21nb91Bb31mcb1Ac41ndi2nfj1ngk2oij5nnk1mol5ltl1muk1mv81zv61pw21",
-        proximity = "full",
     },
 }
 
@@ -480,32 +447,18 @@ function Pins:PrintTeamRosterDebug()
 end
 
 function Pins:PrintTeamStackDebug()
-    local unitMapID = tonumber(self.unitMapID)
     local count, prefix = GetLiveGroupRosterSource(self.unitFrame)
-    local readable, missing = 0, 0
-    if unitMapID and count and count > 0 then
-        for index = 1, count do
-            local unit = (prefix or "raid") .. index
-            if UnitExists(unit) and not UnitIsUnit(unit, "player") then
-                local x, y = self:GetTeamStackUnitMapPosition(unitMapID, unit)
-                if x and y then readable = readable + 1 else missing = missing + 1 end
-            end
-        end
+    local mode = self.teamStackLiveActive and "live-separation" or "native"
+    local spread = ""
+    if self.teamStackLiveActive and tonumber(self.teamStackMaxOffset) then
+        spread = string.format(", spread<=%.1fpx", tonumber(self.teamStackMaxOffset) or 0)
     end
 
-    local mode = "native"
-    if self.teamStackOverlayActive then
-        mode = "precise"
-    elseif self.teamStackRestrictedFallbackActive then
-        mode = "restricted-separation"
-    elseif missing > 0 then
-        mode = "native-restricted"
-    end
     BattleMaps.Chat(string.format(
-        "Team stacking: roster=%s%d, readable=%d, restricted=%d, mode=%s, native=%s%s.",
-        tostring(prefix or "raid"), tonumber(count) or 0, readable, missing, mode,
+        "Team stacking: roster=%s%d, mode=%s, native=%s%s.",
+        tostring(prefix or "raid"), tonumber(count) or 0, mode,
         self.nativeGroupPinsVisible == false and "hidden" or "shown",
-        mode == "native-restricted" and ", stacking=suspended-for-accuracy" or ""
+        spread
     ))
 end
 
@@ -706,7 +659,6 @@ function Pins:PrintFovDiagnostics()
 
     for _, info in ipairs({
         { name = "under", frame = self.playerFovFrame },
-        { name = "arc", frame = self.playerFovArcFrame },
         { name = "beam", frame = self.playerFovBeamFrame },
     }) do
         if info.frame then
@@ -813,7 +765,6 @@ function Pins:RefreshFovClipDiagnostic()
     local pinConfig = configMapID and BattleMaps.Database:GetUnitsConfig(configMapID) or nil
     local appearance = self:GetPlayerFovLayerAppearance(pinConfig, "under")
         or self:GetPlayerFovLayerAppearance(pinConfig, "beam")
-        or self:GetPlayerFovLayerAppearance(pinConfig, "arc")
     if not unitMapID or not appearance then
         self:HideFovClipDiagnostic()
         return false
@@ -921,7 +872,42 @@ function Pins:AcquireLiveMaskedPlayerFovHost(layer, index)
     return host
 end
 
-function Pins:RenderLiveMaskedPlayerFovLayer(layer, pinConfig, appearance, size, unitMapID)
+
+local function RefreshLiveMaskedPlayerFovHosts(pins, layer, rectangleCount)
+    local hosts = pins.liveMaskedPlayerFovHosts and pins.liveMaskedPlayerFovHosts[layer]
+    if type(hosts) ~= "table" then return end
+
+    for index = 1, math.min(tonumber(rectangleCount) or 0, #hosts) do
+        local host = hosts[index]
+        local unitFrame = host and host.unitFrame
+        if host and host:IsShown() and unitFrame then
+            pcall(unitFrame.SetNeedsFullUpdate, unitFrame)
+            pcall(unitFrame.UpdatePlayerPins, unitFrame)
+        end
+    end
+end
+
+local function ScheduleLiveMaskedPlayerFovRefresh(pins, layer, renderKey, rectangleCount)
+    if not C_Timer or type(C_Timer.After) ~= "function" then return end
+
+    local function RefreshIfCurrent()
+        local state = pins.liveMaskedPlayerFovState
+        if not state or state[layer] ~= renderKey then return end
+
+        -- A UnitPositionFrame can be created before Blizzard has finished
+        -- publishing the live battleground player pin. The geometry/settings
+        -- render key is already valid in that case, so retry the native pin
+        -- build shortly after initial creation. Forced battleground refreshes
+        -- also use this same helper below, which covers slower zone-entry
+        -- initialization without disabling the normal render cache.
+        RefreshLiveMaskedPlayerFovHosts(pins, layer, rectangleCount)
+    end
+
+    C_Timer.After(0.15, RefreshIfCurrent)
+    C_Timer.After(0.75, RefreshIfCurrent)
+end
+
+function Pins:RenderLiveMaskedPlayerFovLayer(layer, pinConfig, appearance, size, unitMapID, forceNativeRefresh)
     local geometry = appearance and appearance.maskKind
         and self:GetPlayerFovLiveMaskGeometry(appearance.maskKind) or nil
     if not geometry then
@@ -974,7 +960,18 @@ function Pins:RenderLiveMaskedPlayerFovLayer(layer, pinConfig, appearance, size,
         tostring(frameLevel),
     }, "\031")
     self.liveMaskedPlayerFovState = self.liveMaskedPlayerFovState or {}
-    if self.liveMaskedPlayerFovState[layer] == renderKey then return true end
+    if self.liveMaskedPlayerFovState[layer] == renderKey then
+        -- Zone-entry retries deliberately call RefreshUnits(true). Previously
+        -- the masked FoV cache swallowed those forced refreshes because its
+        -- geometry had not changed. If Blizzard had not published the live
+        -- player pin during the first build, the cone stayed absent until pan
+        -- or zoom changed renderKey. Re-push the native pin only on a forced
+        -- refresh; ordinary 0.2 s unit polling remains fully cached.
+        if forceNativeRefresh == true then
+            RefreshLiveMaskedPlayerFovHosts(self, layer, #rectangles)
+        end
+        return true
+    end
     self.liveMaskedPlayerFovActiveLayers = self.liveMaskedPlayerFovActiveLayers or {}
     self.liveMaskedPlayerFovActiveLayers[layer] = true
 
@@ -1017,10 +1014,11 @@ function Pins:RenderLiveMaskedPlayerFovLayer(layer, pinConfig, appearance, size,
 
     self:HideLiveMaskedPlayerFovLayer(layer, #rectangles + 1)
     self.liveMaskedPlayerFovState[layer] = renderKey
+    ScheduleLiveMaskedPlayerFovRefresh(self, layer, renderKey, #rectangles)
     return true
 end
 
-function Pins:RenderLiveMaskedPlayerFov(pinConfig, size, unitMapID)
+function Pins:RenderLiveMaskedPlayerFov(pinConfig, size, unitMapID, forceNativeRefresh)
     local handledLayers = {}
     if not self:ShouldRenderLivePlayerPosition() or self.fovClipDiagnosticEnabled == true then
         self:HideLiveMaskedPlayerFov()
@@ -1035,7 +1033,8 @@ function Pins:RenderLiveMaskedPlayerFov(pinConfig, size, unitMapID)
                 pinConfig,
                 appearance,
                 size,
-                unitMapID
+                unitMapID,
+                forceNativeRefresh
             )
         else
             self:HideLiveMaskedPlayerFovLayer(layer)
@@ -1043,24 +1042,6 @@ function Pins:RenderLiveMaskedPlayerFov(pinConfig, size, unitMapID)
     end
     return handledLayers
 end
-
-local TEAM_STACK_DIRECTIONS = {
-    compact = true,
-    diagonal = true,
-    horizontal = true,
-    vertical = true,
-}
-
-local COMPACT_STACK_OFFSETS = {
-    {  0,  0 }, {  1,  0 }, {  0,  1 }, {  1,  1 },
-    { -1,  0 }, {  0, -1 }, { -1, -1 }, {  1, -1 }, { -1,  1 },
-    {  2,  0 }, {  0,  2 }, {  2,  1 }, {  1,  2 }, {  2,  2 },
-    { -2,  0 }, {  0, -2 }, { -2, -1 }, { -1, -2 }, { -2, -2 },
-    {  2, -1 }, {  1, -2 }, { -2,  1 }, { -1,  2 },
-    {  3,  0 }, {  0,  3 }, {  3,  1 }, {  1,  3 }, {  3,  2 }, {  2,  3 }, {  3,  3 },
-    { -3,  0 }, {  0, -3 }, { -3, -1 }, { -1, -3 }, { -3, -2 }, { -2, -3 }, { -3, -3 },
-    {  3, -1 }, {  1, -3 }, { -3,  1 },
-}
 
 local TEAM_STACK_TEST_COLORS = {
     { 0.96, 0.55, 0.73 }, -- paladin
@@ -1258,17 +1239,18 @@ end
 
 function Pins:GetHealerIconOnlyBorderSize(metrics)
     metrics = type(metrics) == "table" and metrics or {}
-    local teamRimThickness = (
-        (tonumber(metrics.borderSize) or 12) - (tonumber(metrics.fillSize) or 12)
-    ) * (TEAM_PIN_VISIBLE_DIAMETER / 64)
-    local healerGlyphDiameter = (tonumber(metrics.healerSize) or 12)
-        * (HEALER_CROSS_VISIBLE_DIAMETER / 64)
-    return BattleMaps.Clamp(
-        (healerGlyphDiameter + teamRimThickness)
-            / (HEALER_ICON_ONLY_BORDER_VISIBLE_DIAMETER / 64),
-        3,
-        160
-    )
+
+    -- Both healer textures use a 64 px canvas, but their authored artwork does
+    -- not occupy the same fraction of it: healer_cross.tga is roughly 38 px
+    -- across while healer_cross_border.tga fills almost the entire canvas.
+    -- Giving them equal texture-frame sizes therefore makes the visible black
+    -- backing about 1.7x larger than the colored cross. Size the backing from
+    -- the authored-content ratio, with a small allowance so it remains visible
+    -- as an outline around the glyph.
+    local healerSize = BattleMaps.Clamp(tonumber(metrics.healerSize) or 12, 1, 192)
+    local authoredCrossRatio = 38 / 64
+    local outlineAllowance = 1.14
+    return BattleMaps.Clamp(healerSize * authoredCrossRatio * outlineAllowance, 2, 192)
 end
 
 -- One texture family is used at every scale. The final rendered pin size drives
@@ -1296,29 +1278,18 @@ function Pins:GetTeamPinMetrics(displayedSize, healerSettingSize, baseTeamSize, 
     -- gains visible weight without swapping texture families.
     local fillScale = 1.04 - (0.08 * zoomWeight)
 
-    -- Healer Size is a relative glyph-control value, not an absolute rendered
-    -- pixel size. A value of 16 is the neutral/default ratio. Do not divide by
-    -- the current team-pin size here: doing so leaves the cross nearly
-    -- constant while team pins scale.
+    -- Healer Size is a linear relative control. 16 = 100%. Keeping this
+    -- deliberately simple makes every slider movement visible and keeps Test
+    -- Mode identical to the live UnitPositionFrame renderer. The authored
+    -- cross uses transparent padding, so its texture frame is slightly larger
+    -- than the ordinary circular pin at the neutral setting.
     local neutralHealerSetting = 16
-    local healerControl = healerSettingSize / neutralHealerSetting
-    healerControl = BattleMaps.Clamp(healerControl, 0.25, 3.00)
-
-    -- healer_cross.tga is authored with an approximately 26 px glyph inside a
-    -- 64 px canvas. Convert the desired visible glyph ratio into the texture
-    -- frame size needed to produce it. Texture-frame scales below 1 are valid;
-    -- preventing them was the source of the apparent minimum healer size.
-    local healerArtFraction = 26 / 64
-    local desiredVisibleHealerScale = BattleMaps.Clamp(
-        (0.52 + (0.06 * zoomWeight)) * healerControl,
-        0.16,
-        0.82
+    local healerControl = BattleMaps.Clamp(
+        healerSettingSize / neutralHealerSetting,
+        0.25,
+        3.00
     )
-    local healerTextureScale = BattleMaps.Clamp(
-        desiredVisibleHealerScale / healerArtFraction,
-        0.38,
-        2.05
-    )
+    local healerTextureScale = BattleMaps.Clamp(1.30 * healerControl, 0.325, 3.90)
 
     borderScale = BattleMaps.Clamp(tonumber(borderScale) or 1.00, 0.50, 2.00)
     local borderSize = BattleMaps.Clamp(displayedSize * borderScale, 3, 160)
@@ -1702,18 +1673,16 @@ function Pins:GetPlayerFovMask(maskKind)
     local db = BattleMaps.Database and BattleMaps.Database:Get()
     if not db then return nil end
 
-    -- Preserve the existing SavedVariables/toggles while exposing semantic
-    -- layer names in the renderer. boundary/beam/accent remain accepted as
-    -- compatibility aliases for older debug calls and builds.
+    -- Preserve the retained SavedVariables/toggles while exposing semantic
+    -- layer names in the renderer. boundary/beam remain compatibility aliases
+    -- for older debug calls and builds.
     local semanticKind = ({
         boundary = "core",
         beam = "terrain",
-        accent = "proximity",
     })[maskKind] or maskKind
 
     if semanticKind == "core" and db.fovBoundaryMask ~= true then return nil end
     if semanticKind == "terrain" and db.fovBeamMask == false then return nil end
-    if semanticKind == "proximity" and db.fovAccentMask == false then return nil end
 
     local mapID = tonumber(BattleMaps.MapFrame and BattleMaps.MapFrame.currentMapID)
         or tonumber(self.unitConfigMapID)
@@ -1725,7 +1694,6 @@ function Pins:GetPlayerFovLiveMaskGeometry(maskKind)
     local semanticKind = ({
         boundary = "core",
         beam = "terrain",
-        accent = "proximity",
     })[maskKind] or maskKind
 
     -- The existing setting/asset lookup remains authoritative. A disabled mask
@@ -2575,64 +2543,94 @@ GetUnitStackSlot = function(unit)
     return ((sortKey - 1) % MAX_TEAM_STACK_UNIT_FRAMES) + 1
 end
 
-local function GetStackOffsetVector(direction, index)
-    direction = TEAM_STACK_DIRECTIONS[direction] and direction or "compact"
-    index = math.max(1, tonumber(index) or 1)
+local function GetTeamStackGeometry(teamSize, overlap)
+    teamSize = BattleMaps.Clamp(tonumber(teamSize) or 12, 3, 64)
+    overlap = BattleMaps.Clamp(tonumber(overlap) or 25, 0, 80)
 
-    if direction == "horizontal" then
-        if index == 1 then return 0, 0 end
-        local magnitude = math.floor(index / 2)
-        local sign = (index % 2 == 0) and 1 or -1
-        return sign * magnitude, 0
-    elseif direction == "vertical" then
-        if index == 1 then return 0, 0 end
-        local magnitude = math.floor(index / 2)
-        local sign = (index % 2 == 0) and 1 or -1
-        return 0, sign * magnitude
-    elseif direction == "diagonal" then
-        if index == 1 then return 0, 0 end
-        local magnitude = math.floor(index / 2)
-        local sign = (index % 2 == 0) and 1 or -1
-        return sign * magnitude, sign * magnitude
-    end
+    -- Treat every teammate as the same footprint. unitTeamSize already includes
+    -- the current BattleMaps zoom scale, so live restricted spread follows the
+    -- visible pin size without a second map-size heuristic.
+    local desiredSeparation = BattleMaps.Clamp(
+        teamSize * (1 - (overlap / 100)),
+        1,
+        teamSize
+    )
 
-    local offset = COMPACT_STACK_OFFSETS[index]
-    if offset then return offset[1], offset[2] end
+    -- Live battleground positions are intentionally not read: keep the displacement below one
+    -- visible teammate diameter so isolated players remain geographically honest,
+    -- while allowing enough room for a coincident group to become distinguishable.
+    local maxOffset = BattleMaps.Clamp(
+        desiredSeparation * 1.15,
+        math.max(2.5, teamSize * 0.20),
+        math.max(3, teamSize * 0.95)
+    )
 
-    local ring = math.ceil((math.sqrt(index) - 1) / 2)
-    local side = math.max(1, ring * 2)
-    local position = (index - 1) % (side * 4)
-    if position < side then
-        return ring, -ring + position
-    elseif position < side * 2 then
-        return ring - (position - side), ring
-    elseif position < side * 3 then
-        return -ring, ring - (position - side * 2)
-    end
-    return -ring + (position - side * 3), -ring
+    return desiredSeparation, maxOffset
 end
 
--- UnitPositionFrame can continue drawing restricted battleground positions even
--- when addon Lua cannot read those coordinates. In that fallback path we move
--- each full-canvas, single-unit frame by a small visual offset. Detection radius
--- must never affect this spacing: it is exclusively the proximity threshold used
--- by the precise coordinate path. Pin overlap controls the fallback step.
-local function GetNativeStackOffset(direction, index, step)
-    local vx, vy = GetStackOffsetVector(direction, index)
-    local offsetX = vx * step
-    local offsetY = vy * step
+local function ClampTeamStackOffset(offsetX, offsetY, maxOffset)
+    maxOffset = math.max(0, tonumber(maxOffset) or 0)
     local distance = math.sqrt((offsetX * offsetX) + (offsetY * offsetY))
-
-    -- Keep extreme horizontal/vertical roster patterns bounded without tying
-    -- the bound to detection radius. The bound scales only with stack spacing.
-    local maximumDistance = BattleMaps.Clamp(math.max(step * 4, 48), 48, 96)
-    if distance > maximumDistance and distance > 0 then
-        local scale = maximumDistance / distance
+    if maxOffset > 0 and distance > maxOffset and distance > 0 then
+        local scale = maxOffset / distance
         offsetX = offsetX * scale
         offsetY = offsetY * scale
     end
-
     return offsetX, offsetY
+end
+
+local GOLDEN_ANGLE = math.pi * (3 - math.sqrt(5))
+
+local function GetTeamStackRadialOffset(index, count, desiredSeparation, maxOffset, reservePlayerSlot)
+    index = math.max(1, tonumber(index) or 1)
+    count = math.max(index, tonumber(count) or index)
+    desiredSeparation = math.max(1, tonumber(desiredSeparation) or 1)
+    maxOffset = math.max(1, tonumber(maxOffset) or desiredSeparation)
+
+    -- If the player is excluded from stacking, leave one teammate on its exact
+    -- Blizzard position. Otherwise reserve the centre for the player and spread
+    -- every teammate around it.
+    local centreAvailable = reservePlayerSlot ~= true
+    if centreAvailable and index == 1 then
+        return 0, 0
+    end
+
+    local radialIndex = index - (centreAvailable and 1 or 0)
+    local radialCount = count - (centreAvailable and 1 or 0)
+    if radialCount <= 0 then return 0, 0 end
+
+    -- Live PvP does not expose which teammates actually overlap to addon Lua. A
+    -- golden-angle (sunflower) distribution is therefore preferable to fixed
+    -- rings: arbitrary subsets of roster ordinals are less likely to inherit
+    -- neighbouring offsets, while every offset remains deterministic. Vary the
+    -- radius continuously between a small inner clearance and the same bounded
+    -- maxOffset used by the previous restricted fallback.
+    local minRadius = math.min(
+        maxOffset * 0.38,
+        math.max(2, desiredSeparation * 0.42)
+    )
+    if radialCount == 1 then
+        minRadius = math.min(maxOffset, math.max(minRadius, desiredSeparation * 0.55))
+    end
+
+    local t = BattleMaps.Clamp((radialIndex - 0.5) / radialCount, 0, 1)
+    local minRadiusSq = minRadius * minRadius
+    local maxRadiusSq = maxOffset * maxOffset
+    local radius = math.sqrt(minRadiusSq + ((maxRadiusSq - minRadiusSq) * t))
+    local startAngle = -math.pi * 0.5
+    local angle = startAngle + ((radialIndex - 1) * GOLDEN_ANGLE)
+
+    return math.cos(angle) * radius, math.sin(angle) * radius
+end
+
+local function GetTeamStackOffset(index, count, desiredSeparation, maxOffset, reservePlayerSlot)
+    return GetTeamStackRadialOffset(
+        index,
+        count,
+        desiredSeparation,
+        maxOffset,
+        reservePlayerSlot
+    )
 end
 
 local function ApplyTextureToRegion(region, texture)
@@ -2746,40 +2744,7 @@ function Pins:GetTeamStackUnitMapPosition(unitMapID, unit)
     return nil, nil
 end
 
-function Pins:GetTeamStackAppearance(unit, timeNow)
-    local db = BattleMaps.Database:Get()
-    local isHealer = self:IsFriendlyHealer(unit)
-    local useSolidOutOfCombat = db.useSolidTeamPinOutOfCombat ~= false
-    local trackHealerCombat = self:ShouldUseSplitHealerOverlay()
-    local inCombat = (useSolidOutOfCombat or trackHealerCombat)
-        and self:IsUnitInCombat(unit)
-        or false
-
-    local normalSize = self.unitTeamSize or 12
-    local healerSettingSize = self.unitHealerSize or 16
-    local currentTime = timeNow or GetTime()
-    local r, g, b = self:GetUnitClassColor(unit, currentTime)
-    local pinConfig = BattleMaps.Database:GetUnitsConfig(
-        self.unitConfigMapID or (BattleMaps.MapFrame and BattleMaps.MapFrame.currentMapID)
-    )
-    local healerR, healerG, healerB = self:GetHealerIconColor(unit, currentTime, pinConfig)
-    local specIcon, specName = nil, nil
-    local appearance = self:BuildTeamPinAppearance(
-        isHealer,
-        inCombat,
-        normalSize,
-        healerSettingSize,
-        normalSize,
-        useSolidOutOfCombat,
-        r, g, b,
-        healerR, healerG, healerB,
-        specIcon, specName,
-        pinConfig
-    )
-    appearance.isHealer = isHealer
-    appearance.inCombat = inCombat
-    return appearance
-end
+-- Test Mode owns the lightweight synthetic pin appearance/rendering helpers below.
 
 function Pins:AcquireTeamStackPin(index)
     self.teamStackPinPool = self.teamStackPinPool or {}
@@ -2840,7 +2805,6 @@ function Pins:HideTeamStackOverlay()
         end
     end
     self.testPlayerFacingFrame = nil
-    self.teamStackOverlayActive = false
 end
 
 function Pins:SetNativeGroupPinsVisible(unitFrame, visible)
@@ -2860,324 +2824,10 @@ function Pins:SetNativeGroupPinsVisible(unitFrame, visible)
     return true
 end
 
-function Pins:BuildTeamStackEntries(unitMapID, timeNow, excludePlayerArrow)
-    local unitFrame = self.unitFrame
-    if not unitFrame or not unitMapID then return nil end
-
-    local memberCount, unitBase = GetLiveGroupRosterSource(unitFrame)
-    if memberCount <= 0 then return nil end
-
-    local entries = {}
-    local missingUnits = {}
-    local visibleMembers = 0
-    local largestCollisionSize = 0
-    for index = 1, memberCount do
-        local unit = unitBase .. index
-        if UnitExists(unit) and not UnitIsUnit(unit, "player") then
-            visibleMembers = visibleMembers + 1
-            local x, y = self:GetTeamStackUnitMapPosition(unitMapID, unit)
-            if x and y then
-                local appearance = self:GetTeamStackAppearance(unit, timeNow)
-                local entry = {
-                    unit = unit,
-                    x = x,
-                    y = y,
-                    offsetX = 0,
-                    offsetY = 0,
-                    sortKey = GetUnitStackSortKey(unit),
-                }
-                for key, value in pairs(appearance) do entry[key] = value end
-                entries[#entries + 1] = entry
-                largestCollisionSize = math.max(largestCollisionSize, tonumber(entry.collisionSize) or 0)
-            else
-                missingUnits[#missingUnits + 1] = unit
-            end
-        end
-    end
-
-    if visibleMembers <= 0 then
-        return nil, nil, nil
-    end
-    if #entries <= 0 then
-        return nil, nil, missingUnits
-    end
-
-    local playerX, playerY = self:GetTeamStackUnitMapPosition(unitMapID, "player")
-    local playerEntry
-    if not excludePlayerArrow and playerX and playerY then
-        -- The arrow is visually larger than a teammate pin, but treating that
-        -- artwork as its collision footprint creates an exaggerated empty ring.
-        -- For stacking, the player occupies one ordinary team-pin slot.
-        local teamCollisionSize = largestCollisionSize > 0
-            and largestCollisionSize
-            or (self.unitTeamSize or 12)
-        playerEntry = {
-            unit = "player",
-            x = playerX,
-            y = playerY,
-            fixed = true,
-            sortKey = 0,
-            size = self.unitPlayerSize or 22,
-            collisionSize = teamCollisionSize,
-        }
-    end
-
-    return entries, playerEntry, missingUnits
-end
-
-function Pins:ApplyTeamStackOffsets(entries, playerEntry, radius, step, direction, canvasWidth, canvasHeight)
-    if type(entries) ~= "table" or #entries == 0 then return end
-    radius = BattleMaps.Clamp(tonumber(radius) or 18, 8, 40)
-    step = BattleMaps.Clamp(tonumber(step) or 8, 1, 80)
-    direction = TEAM_STACK_DIRECTIONS[direction] and direction or "compact"
-    canvasWidth = math.max(tonumber(canvasWidth) or 1, 1)
-    canvasHeight = math.max(tonumber(canvasHeight) or 1, 1)
-
-    for _, entry in ipairs(entries) do
-        entry.offsetX = 0
-        entry.offsetY = 0
-        entry.pixelX = entry.x * canvasWidth
-        entry.pixelY = entry.y * canvasHeight
-    end
-
-    local nodes = {}
-    if playerEntry then
-        playerEntry.pixelX = playerEntry.x * canvasWidth
-        playerEntry.pixelY = playerEntry.y * canvasHeight
-        nodes[#nodes + 1] = playerEntry
-    end
-    for _, entry in ipairs(entries) do nodes[#nodes + 1] = entry end
-    if #nodes <= 1 then return end
-
-    -- Build anchor-bounded clusters rather than transitive chains. A line of
-    -- individually-nearby pins cannot pull a distant moving teammate through
-    -- the group. Each ordinary cluster remains bounded to its seed pin, while
-    -- a player-centred cluster remains bounded to the player's true position.
-    -- Departing pins therefore return immediately to their true map position.
-    local function GetCollisionRadius(node)
-        return math.max(
-            tonumber(node and (node.collisionSize or node.borderSize or node.size)) or 0,
-            0
-        ) * 0.5
-    end
-
-    local function WithinRadius(left, right)
-        local dx = left.pixelX - right.pixelX
-        local dy = left.pixelY - right.pixelY
-
-        -- The user radius is an early clustering threshold, not permission for
-        -- visibly overlapping pins to remain unstacked. Always include the
-        -- actual rendered collision footprints, including combat-scaled pins.
-        local collisionDistance = GetCollisionRadius(left) + GetCollisionRadius(right)
-        local effectiveRadius = math.max(radius, collisionDistance)
-        local effectiveRadiusSquared = effectiveRadius * effectiveRadius
-        return math.abs(dx) <= effectiveRadius
-            and math.abs(dy) <= effectiveRadius
-            and ((dx * dx) + (dy * dy)) <= effectiveRadiusSquared
-    end
-
-    local function CanJoinGroup(group, node)
-        -- Every group is bounded to a stable source position rather than using
-        -- transitive neighbour links. This keeps ordinary overlapping clusters
-        -- easy to form while ensuring a moving pin leaves as soon as it is no
-        -- longer near the player or the group's seed pin.
-        return group.anchorNode and WithinRadius(group.anchorNode, node) or false
-    end
-
-    local function AddMember(group, node)
-        group.members[#group.members + 1] = node
-        group.sourceX = group.sourceX + node.pixelX
-        group.sourceY = group.sourceY + node.pixelY
-    end
-
-    local function SortByDistanceFrom(anchor, list)
-        table.sort(list, function(a, b)
-            local adx, ady = a.pixelX - anchor.pixelX, a.pixelY - anchor.pixelY
-            local bdx, bdy = b.pixelX - anchor.pixelX, b.pixelY - anchor.pixelY
-            local distanceA = (adx * adx) + (ady * ady)
-            local distanceB = (bdx * bdx) + (bdy * bdy)
-            if distanceA ~= distanceB then return distanceA < distanceB end
-            if a.sortKey ~= b.sortKey then return a.sortKey < b.sortKey end
-            return tostring(a.unit or "") < tostring(b.unit or "")
-        end)
-    end
-
-    local groups = {}
-    local assigned = {}
-
-    if playerEntry then
-        local playerGroup = {
-            members = {},
-            fixedNode = playerEntry,
-            anchorNode = playerEntry,
-            sourceX = 0,
-            sourceY = 0,
-        }
-        assigned[playerEntry] = true
-
-        local candidates = {}
-        for _, node in ipairs(entries) do candidates[#candidates + 1] = node end
-        SortByDistanceFrom(playerEntry, candidates)
-        for _, node in ipairs(candidates) do
-            if not assigned[node] and CanJoinGroup(playerGroup, node) then
-                assigned[node] = true
-                AddMember(playerGroup, node)
-            end
-        end
-        groups[#groups + 1] = playerGroup
-    end
-
-    for _, seed in ipairs(entries) do
-        if not assigned[seed] then
-            local group = {
-                members = {},
-                fixedNode = nil,
-                anchorNode = seed,
-                sourceX = 0,
-                sourceY = 0,
-            }
-            assigned[seed] = true
-            AddMember(group, seed)
-
-            local candidates = {}
-            for _, node in ipairs(entries) do
-                if not assigned[node] then candidates[#candidates + 1] = node end
-            end
-            SortByDistanceFrom(seed, candidates)
-            for _, node in ipairs(candidates) do
-                if not assigned[node] and CanJoinGroup(group, node) then
-                    assigned[node] = true
-                    AddMember(group, node)
-                end
-            end
-            groups[#groups + 1] = group
-        end
-    end
-
-    local TWO_PI = math.pi * 2
-
-    -- Compact mode uses concentric rings. Ring N contains 6*N slots at radius
-    -- N*step, so nearest-neighbour spacing remains approximately `step` at
-    -- every ring. This avoids the uneven diagonal gaps of the previous square
-    -- lattice and makes 0/40/80% overlap visually consistent.
-    local function GetCompactRingOffset(slotIndex, skipCenter)
-        slotIndex = math.max(math.floor(tonumber(slotIndex) or 1), 1)
-        if not skipCenter then
-            if slotIndex == 1 then return 0, 0 end
-            slotIndex = slotIndex - 1
-        end
-
-        local ring = 1
-        local slotsInRing = 6
-        while slotIndex > slotsInRing do
-            slotIndex = slotIndex - slotsInRing
-            ring = ring + 1
-            slotsInRing = 6 * ring
-        end
-
-        -- A participating player occupies one normal stack slot. The visual
-        -- dimensions of the arrow do not enlarge the first ring.
-        local ringRadius = ring * step
-
-        -- Alternate each ring by half a slot so radial seams do not line up.
-        local phase = -math.pi * 0.5
-        if ring % 2 == 0 then
-            phase = phase + (math.pi / slotsInRing)
-        end
-        local angle = phase + (((slotIndex - 1) / slotsInRing) * TWO_PI)
-        return math.cos(angle) * ringRadius, math.sin(angle) * ringRadius
-    end
-
-    for _, group in pairs(groups) do
-        local memberCount = #group.members
-        if memberCount > 1 or group.fixedNode then
-            table.sort(group.members, function(a, b)
-                if a.sortKey ~= b.sortKey then return a.sortKey < b.sortKey end
-                return tostring(a.unit or "") < tostring(b.unit or "")
-            end)
-
-            local anchorX, anchorY
-            if group.fixedNode then
-                anchorX = group.fixedNode.pixelX
-                anchorY = group.fixedNode.pixelY
-            else
-                anchorX = group.sourceX / math.max(memberCount, 1)
-                anchorY = group.sourceY / math.max(memberCount, 1)
-            end
-
-            local planned = {}
-            local minimumX, minimumY = math.huge, math.huge
-            local maximumX, maximumY = -math.huge, -math.huge
-
-            for memberIndex, entry in ipairs(group.members) do
-                local relativeX, relativeY
-                if direction == "compact" then
-                    relativeX, relativeY = GetCompactRingOffset(
-                        memberIndex,
-                        group.fixedNode ~= nil
-                    )
-                else
-                    local patternIndex = memberIndex + (group.fixedNode and 1 or 0)
-                    local vx, vy = GetStackOffsetVector(direction, patternIndex)
-                    if group.fixedNode then
-                        local length = math.sqrt((vx * vx) + (vy * vy))
-                        local ring = math.max(math.abs(vx), math.abs(vy))
-                        local targetDistance = math.max(ring, 1) * step
-                        if length > 0 then
-                            relativeX = (vx / length) * targetDistance
-                            relativeY = (vy / length) * targetDistance
-                        else
-                            relativeX, relativeY = 0, 0
-                        end
-                    else
-                        relativeX = vx * step
-                        relativeY = vy * step
-                    end
-                end
-
-                local targetX = anchorX + relativeX
-                local targetY = anchorY + relativeY
-                local halfSize = math.max(
-                    tonumber(entry.collisionSize or entry.borderSize or entry.size) or step,
-                    1
-                ) * 0.5
-
-                planned[#planned + 1] = {
-                    entry = entry,
-                    targetX = targetX,
-                    targetY = targetY,
-                    halfSize = halfSize,
-                }
-                minimumX = math.min(minimumX, targetX - halfSize)
-                maximumX = math.max(maximumX, targetX + halfSize)
-                minimumY = math.min(minimumY, targetY - halfSize)
-                maximumY = math.max(maximumY, targetY + halfSize)
-            end
-
-            -- Move the entire layout as one unit if it would clip outside the
-            -- map canvas. Per-pin clamping would collapse spacing near edges.
-            local shiftX, shiftY = 0, 0
-            if minimumX < 0 then
-                shiftX = -minimumX
-            elseif maximumX > canvasWidth then
-                shiftX = canvasWidth - maximumX
-            end
-            if minimumY < 0 then
-                shiftY = -minimumY
-            elseif maximumY > canvasHeight then
-                shiftY = canvasHeight - maximumY
-            end
-
-            for _, placement in ipairs(planned) do
-                local entry = placement.entry
-                local targetX = placement.targetX + shiftX
-                local targetY = placement.targetY + shiftY
-                entry.offsetX = targetX - entry.pixelX
-                entry.offsetY = targetY - entry.pixelY
-            end
-        end
-    end
-end
+-- Test Mode uses the lightweight overlay renderer below, but all stacking
+-- geometry is supplied by the same deterministic live-PvP offset generator
+-- used by the UnitPositionFrame path. There is no separate readable-coordinate
+-- collision solver.
 
 function Pins:RenderTeamStackOverlay(entries, canvasWidth, canvasHeight)
     if type(entries) ~= "table" or #entries == 0 then
@@ -3314,21 +2964,6 @@ function Pins:RenderTeamStackOverlay(entries, canvasWidth, canvasHeight)
         end
         frame:Show()
 
-        -- Coordinate-readable live stacking already gives us the exact map
-        -- position. Preserve it for the short-lived death marker without any
-        -- additional map/API query.
-        if not isPlayer and entry.unit and UnitExists(entry.unit) and UnitGUID then
-            local guid = UnitGUID(entry.unit)
-            if guid then
-                self.teamLastKnownPositionByGUID = self.teamLastKnownPositionByGUID or {}
-                self.teamLastKnownPositionByGUID[guid] = {
-                    x = BattleMaps.Clamp(tonumber(entry.x) or 0, 0, 1),
-                    y = BattleMaps.Clamp(tonumber(entry.y) or 0, 0, 1),
-                    mapID = tonumber(BattleMaps.MapFrame and BattleMaps.MapFrame.currentMapID),
-                    time = type(GetTime) == "function" and GetTime() or 0,
-                }
-            end
-        end
     end
 
     if type(self.teamStackPinPool) == "table" then
@@ -3348,7 +2983,6 @@ function Pins:RenderTeamStackOverlay(entries, canvasWidth, canvasHeight)
             end
         end
     end
-    self.teamStackOverlayActive = true
 end
 
 function Pins:IsTeamStackTestPreviewActive()
@@ -3362,9 +2996,9 @@ function Pins:IsTeamStackTestPreviewActive()
         or nil
     if not pinConfig then return false end
 
-    -- Test mode is a visual sandbox. Replace the old full-map dummy team-pin
-    -- grid with a small grouped preview on every map. When stacking is enabled,
-    -- the same preview is run through the stack-offset pass.
+    -- Test Mode is a visual sandbox for the same deterministic stacking offsets
+    -- used by live battleground UnitPositionFrames. There is no alternate
+    -- readable-coordinate stacking mode.
     return true
 end
 
@@ -3374,7 +3008,7 @@ function Pins:GetTeamStackTestAppearance(index, isHealer, inCombat, pinConfig, z
 
     local useSolidOutOfCombat = BattleMaps.Database:Get().useSolidTeamPinOutOfCombat ~= false
     local normalSize = BattleMaps.Clamp((tonumber(pinConfig.teamMemberPinSize) or 12) * zoomScale, 3, 64)
-    local healerSettingSize = BattleMaps.Clamp(tonumber(pinConfig.healerPinSize) or 16, 0.50, 160)
+    local healerSettingSize = tonumber(pinConfig.healerPinSize) or 16
     local color = GetTeamStackTestColor(index, classFile)
     local healerR, healerG, healerB = self:GetHealerIconColor(nil, GetTime(), pinConfig, classFile)
     local specIcon, specName = nil, nil
@@ -3409,24 +3043,21 @@ function Pins:RefreshTeamStackTestPreview()
     local pinConfig = BattleMaps.Database:GetUnitsConfig(mapID)
     local zoomScale = (self.GetPinZoomScale and self:GetPinZoomScale()) or 1
     local teamSize = BattleMaps.Clamp((tonumber(pinConfig.teamMemberPinSize) or 12) * zoomScale, 3, 64)
-    local healerSettingSize = BattleMaps.Clamp(tonumber(pinConfig.healerPinSize) or 16, 0.50, 160)
     local playerSize = BattleMaps.Clamp((tonumber(pinConfig.playerArrowSize) or 22) * zoomScale, 12, 256)
     local playerAppearance = self:GetPlayerPinAppearance(pinConfig, playerSize, teamSize)
     local playerVisualSize = playerAppearance.borderSize or playerAppearance.size
     local fovSize = self:GetPlayerFovSize(pinConfig, self:GetPlayerFovMapScale())
-    local overlap = BattleMaps.Clamp(tonumber(pinConfig.teamPinStackOverlap) or 45, 0, 80)
-    local step = BattleMaps.Clamp(teamSize * (1 - (overlap / 100)), 1, 80)
-    local direction = pinConfig.teamPinStackDirection or "compact"
+    local overlap = BattleMaps.Clamp(tonumber(pinConfig.teamPinStackOverlap) or 30, 0, 80)
     local stackEnabled = pinConfig.stackTeamPins ~= false
 
     local layout = TEAM_PIN_TEST_LAYOUTS[tonumber(mapID)] or DEFAULT_TEAM_PIN_TEST_LAYOUT
     local playerX, playerY = layout.player[1], layout.player[2]
     local primaryX, primaryY = layout.primary[1], layout.primary[2]
 
-    -- Two pins deliberately exercise the player-arrow relationship. With
-    -- "Exclude player arrow" enabled, raid1 sits directly on the arrow and
-    -- raid2 remains close beside it. With the option disabled, the normal
-    -- player-avoidance pass moves them away from the arrow footprint.
+    -- Two pins deliberately exercise the player relationship. With
+    -- "Exclude player pin" enabled, the first teammate is allowed the zero
+    -- offset slot and can sit directly on the player. With it disabled, the
+    -- centre slot is reserved and every teammate receives the live-PvP spread.
     local nearbyPlayerX = playerX + ((playerVisualSize * 0.72) / canvasWidth)
     local specs = {
         { unit = "raid1",  x = playerX,          y = playerY,          healer = false, combat = false, classFile = "PALADIN", playerDemo = true },
@@ -3442,7 +3073,6 @@ function Pins:RefreshTeamStackTestPreview()
     }
 
     local entries = {}
-    local largestCollisionSize = 0
     for index, spec in ipairs(specs) do
         local appearance = self:GetTeamStackTestAppearance(index, spec.healer, spec.combat, pinConfig, zoomScale, spec.classFile)
         local entry = {
@@ -3457,59 +3087,25 @@ function Pins:RefreshTeamStackTestPreview()
         }
         for key, value in pairs(appearance) do entry[key] = value end
         entries[#entries + 1] = entry
-        largestCollisionSize = math.max(largestCollisionSize, tonumber(entry.collisionSize) or 0)
     end
 
-    -- Match live stacking: spacing is based on the largest currently rendered
-    -- collision circle, so 0% stack overlap remains genuinely non-overlapping
-    -- even when combat scaling makes some teammate pins larger than others.
-    step = BattleMaps.Clamp(
-        math.max(teamSize, largestCollisionSize) * (1 - (overlap / 100)),
-        1,
-        80
-    )
-
-    local metrics = self:GetTeamPinMetrics(
-        largestCollisionSize > 0 and largestCollisionSize or teamSize,
-        healerSettingSize,
-        teamSize,
-        playerVisualSize,
-        pinConfig.teamPinBorderScale
-    )
-    local playerEntry = {
-        unit = "player",
-        x = playerX,
-        y = playerY,
-        fixed = true,
-        sortKey = 0,
-        size = playerVisualSize,
-        avoidRadius = metrics.playerAvoidRadius,
-    }
+    -- Stacking uses one canonical teammate footprint. Healer artwork and
+    -- combat-state textures do not change the live/test spread geometry.
 
     local excludePlayerArrow = pinConfig.excludePlayerArrowFromStack == true
     if stackEnabled then
-        -- Live PvP cannot expose exact teammate coordinates to addon Lua. Test
-        -- mode therefore demonstrates the same bounded roster-based separation
-        -- used by the restricted live path instead of the retired radius model.
-        local overlapFraction = overlap / 80
-        local maxOffset = BattleMaps.Clamp(
-            teamSize * (0.84 - (0.51 * overlapFraction)),
-            3,
-            12
-        )
-        local restrictedStep = BattleMaps.Clamp(
-            maxOffset * (0.88 - (0.63 * overlapFraction)),
-            1,
-            maxOffset
-        )
+        -- Use the exact same geometry generator as the live battleground
+        -- UnitPositionFrame path so Test Mode reflects production behaviour.
+        local desiredSeparation, maxOffset = GetTeamStackGeometry(teamSize, overlap)
+        local reservePlayerSlot = not excludePlayerArrow
         for index, entry in ipairs(entries) do
-            local patternIndex = index + (excludePlayerArrow and 0 or 1)
-            local offsetX, offsetY = GetNativeStackOffset(direction, patternIndex, restrictedStep)
-            local distance = math.sqrt((offsetX * offsetX) + (offsetY * offsetY))
-            if distance > maxOffset and distance > 0 then
-                local scale = maxOffset / distance
-                offsetX, offsetY = offsetX * scale, offsetY * scale
-            end
+            local offsetX, offsetY = GetTeamStackOffset(
+                index,
+                #entries,
+                desiredSeparation,
+                maxOffset,
+                reservePlayerSlot
+            )
             entry.offsetX = offsetX
             entry.offsetY = offsetY
         end
@@ -3528,8 +3124,8 @@ function Pins:RefreshTeamStackTestPreview()
         kind = playerAppearance.style == "team" and "teamPlayer" or "player",
         unit = "player",
         displayName = "Player",
-        x = playerEntry.x,
-        y = playerEntry.y,
+        x = playerX,
+        y = playerY,
         offsetX = 0,
         offsetY = 0,
         fillTexture = playerAppearance.texture,
@@ -3576,9 +3172,6 @@ function Pins:GetPlayerFovLayerRenderParent(layer)
     local mapFrame = BattleMaps.MapFrame
     if layer == "under" then
         return (mapFrame and mapFrame.fovLayer) or self.parent
-    end
-    if layer == "arc" then
-        return (mapFrame and mapFrame.fovOverlayLayer) or self.parent
     end
     return self.parent
 end
@@ -3666,10 +3259,8 @@ function Pins:HideTeamStackUnitFrames()
             end
         end
     end
-    self.teamStackUnitFrameFallbackActive = false
-    self.teamStackFallbackUsesFullRoster = false
-    self.teamStackRestrictedFallbackActive = false
-    self.teamStackRestrictedMaxOffset = nil
+    self.teamStackLiveActive = false
+    self.teamStackMaxOffset = nil
 end
 
 function Pins:SetLivePlayerUnitFramesEnabled(enabled)
@@ -3682,7 +3273,6 @@ function Pins:SetLivePlayerUnitFramesEnabled(enabled)
     for _, frame in ipairs({
         self.playerTeamBorderFrame,
         self.playerFovFrame,
-        self.playerFovArcFrame,
         self.playerFovBeamFrame,
         self.playerFrame,
     }) do
@@ -3705,7 +3295,6 @@ function Pins:SuppressLiveUnitFramesForPreview()
         self.teamSpecIconFrame,
         self.playerTeamBorderFrame,
         self.playerFovFrame,
-        self.playerFovArcFrame,
         self.playerFovBeamFrame,
         self.playerFrame,
     }) do
@@ -3722,7 +3311,6 @@ function Pins:SuppressLiveUnitFramesForPreview()
     for _, frame in ipairs({
         self.playerTeamBorderFrame,
         self.playerFovFrame,
-        self.playerFovArcFrame,
         self.playerFovBeamFrame,
         self.playerFrame,
     }) do
@@ -3823,7 +3411,29 @@ function Pins:InitializeTeamStackUnitFrames(parent)
     end
 end
 
-function Pins:LayoutTeamStackUnitFrames(step, direction, useNativePositions, reservePlayerSlot, maxOffset)
+local function GetTeamStackSlotOrdinals(pins)
+    local ordinals = {}
+    local activeCount = 0
+    local memberCount, unitBase = GetLiveGroupRosterSource(pins and pins.unitFrame)
+
+    for index = 1, tonumber(memberCount) or 0 do
+        local unit = tostring(unitBase or "raid") .. index
+        if UnitExists(unit) and not UnitIsUnit(unit, "player") then
+            local slot = GetUnitStackSlot(unit)
+            -- MAX_TEAM_STACK_UNIT_FRAMES can intentionally fold very large raid
+            -- rosters. Count each render slot once because every unit in that
+            -- slot necessarily shares the same visual offset.
+            if not ordinals[slot] then
+                activeCount = activeCount + 1
+                ordinals[slot] = activeCount
+            end
+        end
+    end
+
+    return ordinals, activeCount
+end
+
+function Pins:LayoutTeamStackUnitFrames(step, reservePlayerSlot, maxOffset)
     local mapFrame = BattleMaps.MapFrame
     local canvas = mapFrame and mapFrame.canvas
     if not canvas or type(self.teamStackUnitFrames) ~= "table" then return false end
@@ -3834,29 +3444,26 @@ function Pins:LayoutTeamStackUnitFrames(step, direction, useNativePositions, res
         return false
     end
 
-    direction = TEAM_STACK_DIRECTIONS[direction] and direction or "compact"
     step = BattleMaps.Clamp(tonumber(step) or 8, 1, 80)
+    maxOffset = math.max(0, tonumber(maxOffset) or step)
+
+    local stackOrdinals, stackCount = GetTeamStackSlotOrdinals(self)
 
     for slot, fillFrame in ipairs(self.teamStackUnitFrames) do
         local offsetX, offsetY = 0, 0
-        if not useNativePositions then
-            -- Reserve the centre slot for the player arrow when it participates
-            -- in stacking. The teammate's native position remains the anchor;
-            -- only this bounded visual offset is added.
-            local patternIndex = slot + (reservePlayerSlot and 1 or 0)
-            local vx, vy = GetNativeStackOffset(direction, patternIndex, step)
-            maxOffset = tonumber(maxOffset)
-            if maxOffset and maxOffset > 0 then
-                -- In restricted PvP these are deliberate micro-offsets, not
-                -- authoritative proximity stacks. Keep every teammate close to
-                -- Blizzard's native position so isolated players and objective
-                -- carriers are never displaced by a large roster-slot offset.
-                local length = math.sqrt((vx * vx) + (vy * vy))
-                if length > maxOffset and length > 0 then
-                    local scale = maxOffset / length
-                    vx, vy = vx * scale, vy * scale
-                end
-            end
+        local ordinal = stackOrdinals and stackOrdinals[slot]
+        if ordinal then
+            -- Live PvP uses dense roster ordering so the player's raid slot does
+            -- not leave a random hole. Blizzard remains authoritative for each
+            -- UnitPositionFrame position; BattleMaps only adds this bounded,
+            -- deterministic render offset.
+            local vx, vy = GetTeamStackOffset(
+                ordinal,
+                stackCount or ordinal,
+                step,
+                maxOffset,
+                reservePlayerSlot
+            )
             offsetX, offsetY = vx, -vy
         end
 
@@ -3949,56 +3556,14 @@ function Pins:SetTeamStackSlotFanOffset(slot, offsetX, offsetY)
     end
 end
 
-function Pins:SetTeamOverlayFanOffset(unit, offsetX, offsetY)
-    local mapFrame = BattleMaps.MapFrame
-    local canvas = mapFrame and mapFrame.canvas
-    if not canvas or type(self.teamStackPinPool) ~= "table" then return end
-
-    for _, frame in ipairs(self.teamStackPinPool) do
-        if frame.active and frame.BattleMapsUnit == unit then
-            offsetX = tonumber(offsetX) or 0
-            offsetY = tonumber(offsetY) or 0
-            local currentX = tonumber(frame.BattleMapsFanOffsetX) or 0
-            local currentY = tonumber(frame.BattleMapsFanOffsetY) or 0
-            if math.abs(currentX - offsetX) > 0.01 or math.abs(currentY - offsetY) > 0.01 then
-                frame.BattleMapsFanOffsetX = offsetX
-                frame.BattleMapsFanOffsetY = offsetY
-                frame:ClearAllPoints()
-                frame:SetPoint(
-                    "CENTER",
-                    canvas,
-                    "TOPLEFT",
-                    (tonumber(frame.BattleMapsBasePointX) or 0) + offsetX,
-                    (tonumber(frame.BattleMapsBasePointY) or 0) + offsetY
-                )
-                local borderFrame = frame.borderFrame
-                if borderFrame then
-                    borderFrame:ClearAllPoints()
-                    borderFrame:SetPoint(
-                        "CENTER",
-                        canvas,
-                        "TOPLEFT",
-                        (tonumber(frame.BattleMapsBasePointX) or 0) + offsetX,
-                        (tonumber(frame.BattleMapsBasePointY) or 0) + offsetY
-                    )
-                end
-            end
-            return
-        end
-    end
-end
-
 function Pins:ResetTeamHoverFanOut(clearOnly)
     local state = self.teamHoverFanOutState
     if state and type(state.entries) == "table" and not clearOnly then
         for _, entry in ipairs(state.entries) do
             local unit = entry and entry.unit
             if unit then
-                if self.teamStackUnitFrameFallbackActive then
+                if self.teamStackLiveActive then
                     self:SetTeamStackSlotFanOffset(GetUnitStackSlot(unit), 0, 0)
-                end
-                if self.teamStackOverlayActive then
-                    self:SetTeamOverlayFanOffset(unit, 0, 0)
                 end
             end
         end
@@ -4015,40 +3580,30 @@ function Pins:UpdateTeamHoverFanOut(entries)
     return type(entries) == "table" and entries or {}
 end
 
-function Pins:PrepareTeamStackUnitFrameFallback(
+function Pins:PrepareTeamStackUnitFrames(
     unitMapID,
-    step,
-    direction,
     reservePlayerSlot
 )
     if not unitMapID or type(self.teamStackUnitFrames) ~= "table" then return false end
 
-    -- If even one teammate position is restricted, use the secure-frame path
-    -- for the complete roster. Mixing coordinate-readable overlay pins with
-    -- one-unit secure frames caused the restricted units to disappear on live
-    -- battleground maps. Each auxiliary frame owns one stable roster slot (or
-    -- several slots in very large raids), so Blizzard remains authoritative for
-    -- every live position while BattleMaps applies only a bounded visual offset.
+    local _, teammateCount = GetTeamStackSlotOrdinals(self)
+    if not teammateCount or teammateCount <= 0 then
+        self:HideTeamStackUnitFrames()
+        return false
+    end
+
+    -- This is the sole live stacking path. Each auxiliary UnitPositionFrame owns
+    -- one stable roster slot (or several slots in very large raids), leaving
+    -- Blizzard authoritative for restricted battleground positions while
+    -- BattleMaps applies only a bounded deterministic render offset.
     local teamSize = BattleMaps.Clamp(tonumber(self.unitTeamSize) or 12, 3, 64)
     local mapID = self.unitConfigMapID or (BattleMaps.MapFrame and BattleMaps.MapFrame.currentMapID)
     local pinConfig = BattleMaps.Database:GetUnitsConfig(mapID)
-    local overlap = BattleMaps.Clamp(tonumber(pinConfig.teamPinStackOverlap) or 45, 0, 80)
-    local overlapFraction = overlap / 80
-    local maxOffset = BattleMaps.Clamp(
-        teamSize * (0.84 - (0.51 * overlapFraction)),
-        3,
-        12
-    )
-    local restrictedStep = BattleMaps.Clamp(
-        maxOffset * (0.88 - (0.63 * overlapFraction)),
-        1,
-        maxOffset
-    )
+    local overlap = BattleMaps.Clamp(tonumber(pinConfig.teamPinStackOverlap) or 30, 0, 80)
+    local stackStep, maxOffset = GetTeamStackGeometry(teamSize, overlap)
 
     if not self:LayoutTeamStackUnitFrames(
-        restrictedStep,
-        direction,
-        false,
+        stackStep,
         reservePlayerSlot,
         maxOffset
     ) then
@@ -4101,10 +3656,8 @@ function Pins:PrepareTeamStackUnitFrameFallback(
         anyActive = true
     end
 
-    self.teamStackUnitFrameFallbackActive = anyActive
-    self.teamStackFallbackUsesFullRoster = anyActive
-    self.teamStackRestrictedFallbackActive = anyActive
-    self.teamStackRestrictedMaxOffset = maxOffset
+    self.teamStackLiveActive = anyActive
+    self.teamStackMaxOffset = maxOffset
     return anyActive
 end
 
@@ -4861,7 +4414,6 @@ function Pins:InitializeUnitFrames(parent)
     end
 
     self.playerFovFrame = CreatePlayerFovFrame("under", "BattleMapsPlayerFovFrame")
-    self.playerFovArcFrame = CreatePlayerFovFrame("arc", "BattleMapsPlayerFovArcFrame")
     self.playerFovBeamFrame = CreatePlayerFovFrame("beam", "BattleMapsPlayerFovBeamFrame")
 
     local playerFrame = CreateFrame(
@@ -4903,7 +4455,6 @@ function Pins:LayoutUnitFrame()
         { frame = self.teamSpecIconFrame, level = TEAM_SPEC_ICON_FRAME_LEVEL_OFFSET, key = "teamSpecIconFrameAnchored", specOffset = true },
         { frame = self.playerTeamBorderFrame, level = self.playerTeamBorderFrameLevelOffset or PLAYER_TEAM_BORDER_FRAME_LEVEL_OFFSET, key = "playerTeamBorderFrameAnchored" },
         { frame = self.playerFovFrame, key = "playerFovFrameAnchored", fovLayer = "under" },
-        { frame = self.playerFovArcFrame, key = "playerFovArcFrameAnchored", fovLayer = "arc" },
         { frame = self.playerFovBeamFrame, key = "playerFovBeamFrameAnchored", fovLayer = "beam" },
         { frame = self.playerFrame, level = self.playerArrowFrameLevelOffset or PLAYER_FRAME_LEVEL_OFFSET, key = "playerFrameAnchored" },
     }
@@ -5001,7 +4552,6 @@ function Pins:RefreshUnits(forceFullUpdate)
             self.teamSpecIconFrame,
             self.playerTeamBorderFrame,
             self.playerFovFrame,
-            self.playerFovArcFrame,
             self.playerFovBeamFrame,
             self.playerFrame,
         }) do
@@ -5018,7 +4568,6 @@ function Pins:RefreshUnits(forceFullUpdate)
     for _, frame in ipairs({
         self.playerTeamBorderFrame,
         self.playerFovFrame,
-        self.playerFovArcFrame,
         self.playerFovBeamFrame,
         self.playerFrame,
     }) do
@@ -5061,9 +4610,9 @@ function Pins:RefreshUnits(forceFullUpdate)
     local playerAppearance = self:GetPlayerPinAppearance(pinConfig, playerSize, teamSize)
     local fovStyle = self:GetPlayerFovStyle(pinConfig)
     local fovSize = self:GetPlayerFovSize(pinConfig, self:GetPlayerFovMapScale())
-    local healerSettingSize = BattleMaps.Clamp(tonumber(pinConfig.healerPinSize) or 16, 0.50, 160)
     local teamBorderScale = self:GetTeamPinBorderScale(pinConfig)
     local healerPinStyle = self:GetHealerPinStyle(pinConfig)
+    local healerSettingSize = tonumber(pinConfig.healerPinSize) or 16
     local metrics = self:GetTeamPinMetrics(
         teamSize,
         healerSettingSize,
@@ -5084,7 +4633,6 @@ function Pins:RefreshUnits(forceFullUpdate)
             self.teamSpecIconFrame,
             self.playerTeamBorderFrame,
             self.playerFovFrame,
-            self.playerFovArcFrame,
             self.playerFovBeamFrame,
             self.playerFrame,
         }) do
@@ -5124,7 +4672,7 @@ function Pins:RefreshUnits(forceFullUpdate)
         self.unitFovStyle = fovStyle
         -- UnitPositionFrame owns live battleground positioning. Keep its
         -- native pin dimensions synchronized with the FoV scale setting.
-        for _, frame in ipairs({ self.playerFovFrame, self.playerFovArcFrame, self.playerFovBeamFrame }) do
+        for _, frame in ipairs({ self.playerFovFrame, self.playerFovBeamFrame }) do
             if frame then frame:SetPinSize("player", fovSize) end
         end
         forceFullUpdate = true
@@ -5151,74 +4699,26 @@ function Pins:RefreshUnits(forceFullUpdate)
     end
     self:LayoutUnitFrame()
 
-    local teamStackEntries, teamStackPlayerEntry, missingTeamStackUnits
-    local useTeamStackOverlay = false
-    local useTeamStackUnitFrameFallback = false
-    local stackStep
-    local stackDirection = pinConfig.teamPinStackDirection or "compact"
+    local useTeamStackUnitFrames = false
     if pinConfig.stackTeamPins ~= false then
-        local excludePlayerArrow = pinConfig.excludePlayerArrowFromStack == true
-        teamStackEntries, teamStackPlayerEntry, missingTeamStackUnits = self:BuildTeamStackEntries(
+        useTeamStackUnitFrames = self:PrepareTeamStackUnitFrames(
             unitMapID,
-            GetTime(),
-            excludePlayerArrow
+            pinConfig.excludePlayerArrowFromStack ~= true
         )
-        local radius = tonumber(pinConfig.teamPinStackRadius) or 18
-        local overlap = BattleMaps.Clamp(tonumber(pinConfig.teamPinStackOverlap) or 45, 0, 80)
-        local stackCollisionSize = teamSize
-        for _, entry in ipairs(teamStackEntries or {}) do
-            stackCollisionSize = math.max(
-                stackCollisionSize,
-                tonumber(entry.collisionSize or entry.borderSize or entry.size) or 0
-            )
-        end
-        stackStep = BattleMaps.Clamp(stackCollisionSize * (1 - (overlap / 100)), 1, 80)
-        if teamStackEntries then
-            self:ApplyTeamStackOffsets(
-                teamStackEntries,
-                teamStackPlayerEntry,
-                radius,
-                stackStep,
-                stackDirection,
-                self.unitFrameWidth or 1,
-                self.unitFrameHeight or 1
-            )
-            useTeamStackOverlay = true
-        end
-
-        -- Blizzard restricts teammate coordinates in live battlegrounds, so
-        -- true radius clustering cannot be calculated there. Use the existing
-        -- per-roster UnitPositionFrames with small, bounded, deterministic
-        -- offsets. This preserves Blizzard's native position while making
-        -- overlapping groups readable at a glance without mouse interaction.
-        -- The offset cap is intentionally much smaller than one team pin.
-        if type(missingTeamStackUnits) == "table" and #missingTeamStackUnits > 0 then
-            useTeamStackOverlay = false
-            teamStackEntries = nil
-            useTeamStackUnitFrameFallback = self:PrepareTeamStackUnitFrameFallback(
-                unitMapID,
-                stackStep,
-                stackDirection,
-                pinConfig.excludePlayerArrowFromStack ~= true
-            )
-        end
     end
 
-    local showNativeTeam = not (useTeamStackOverlay or useTeamStackUnitFrameFallback)
+    local showNativeTeam = not useTeamStackUnitFrames
     ConfigureTeamTooltipHitTesting(unitFrame, showNativeTeam)
     ConfigureTeamTooltipHitTesting(self.teamBorderFrame, false)
     ConfigureTeamTooltipHitTesting(self.healerOverlayFrame, false)
     ConfigureTeamTooltipHitTesting(self.teamSpecIconFrame, false)
     ConfigureTeamTooltipHitTesting(self.playerTeamBorderFrame, false)
     ConfigureTeamTooltipHitTesting(self.playerFovFrame, false)
-    ConfigureTeamTooltipHitTesting(self.playerFovArcFrame, false)
     ConfigureTeamTooltipHitTesting(self.playerFovBeamFrame, false)
     ConfigureTeamTooltipHitTesting(self.playerFrame, false)
     if self:SetNativeGroupPinsVisible(unitFrame, showNativeTeam) then forceFullUpdate = true end
-    if not useTeamStackUnitFrameFallback then
+    if not useTeamStackUnitFrames then
         self:HideTeamStackUnitFrames()
-    else
-        self.teamStackRestrictedFallbackActive = true
     end
 
     if forceFullUpdate then
@@ -5229,7 +4729,6 @@ function Pins:RefreshUnits(forceFullUpdate)
             self.teamSpecIconFrame,
             self.playerTeamBorderFrame,
             self.playerFovFrame,
-            self.playerFovArcFrame,
             self.playerFovBeamFrame,
             self.playerFrame,
         }) do
@@ -5249,13 +4748,17 @@ function Pins:RefreshUnits(forceFullUpdate)
     -- Enabled masks use clipped duplicates of the same native widget. A full
     -- mask needs one canvas clip; partial masks use their compiled rectangles.
     -- Disabled masks stay on the single established UnitPositionFrame pass.
-    local liveMaskedFovLayers = self:RenderLiveMaskedPlayerFov(pinConfig, fovSize, unitMapID)
+    local liveMaskedFovLayers = self:RenderLiveMaskedPlayerFov(
+        pinConfig,
+        fovSize,
+        unitMapID,
+        forceFullUpdate == true
+    )
 
     -- Live FoV passes remain on UnitPositionFrame so Blizzard can supply the
     -- restricted player position and facing inside battleground instances.
     for _, info in ipairs({
         { layer = "under", frame = self.playerFovFrame },
-        { layer = "arc", frame = self.playerFovArcFrame },
         { layer = "beam", frame = self.playerFovBeamFrame },
     }) do
         local frame = info.frame
@@ -5323,17 +4826,47 @@ function Pins:RefreshUnits(forceFullUpdate)
         if self.teamSpecIconFrame then self.teamSpecIconFrame:SetAlpha(0) end
     end
 
-    if useTeamStackOverlay then
-        self:RenderTeamStackOverlay(teamStackEntries, self.unitFrameWidth or 1, self.unitFrameHeight or 1)
-    else
-        self:HideTeamStackOverlay()
-    end
-    if useTeamStackUnitFrameFallback then self:UpdateTeamStackUnitFrames() end
+    -- The overlay renderer is Test-Mode-only. Live battleground stacking always
+    -- uses the UnitPositionFrame path above.
+    self:HideTeamStackOverlay()
+    if useTeamStackUnitFrames then self:UpdateTeamStackUnitFrames() end
 
     for _, pingFrame in ipairs(self.unitPingFrames) do
         if pingFrame:IsShown() then pingFrame:UpdatePlayerPins() end
     end
 
+end
+
+function Pins:PrintHealerDebug()
+    local mapID = BattleMaps.ResolveCurrentBattlegroundMapID()
+        or (BattleMaps.MapFrame and BattleMaps.MapFrame.currentMapID)
+        or (BattleMaps.Options and BattleMaps.Options.selectedMapID)
+    local pinConfig = BattleMaps.Database and BattleMaps.Database:GetUnitsConfig(mapID)
+    if not pinConfig then
+        BattleMaps.Chat("Healer diagnostics unavailable: unit settings not found.")
+        return
+    end
+
+    local zoomScale = self:GetPinZoomScale()
+    local teamSize = BattleMaps.Clamp((tonumber(pinConfig.teamMemberPinSize) or 12) * zoomScale, 3, 64)
+    local healerSettingSize = tonumber(pinConfig.healerPinSize) or 16
+    local metrics = self:GetTeamPinMetrics(
+        teamSize,
+        healerSettingSize,
+        teamSize,
+        nil,
+        pinConfig.teamPinBorderScale
+    )
+    BattleMaps.Chat(string.format(
+        "Healer pins: style=%s, setting=%.1f (%.0f%%), team=%.1fpx, glyph=%.1fpx, icon-backing=%.1fpx, stacking=%s.",
+        self:GetHealerPinStyle(pinConfig),
+        healerSettingSize,
+        (healerSettingSize / 16) * 100,
+        teamSize,
+        metrics.healerSize or 0,
+        self:GetHealerIconOnlyBorderSize(metrics),
+        self.teamStackLiveActive and "live" or "native"
+    ))
 end
 
 function Pins:RefreshPlayer()

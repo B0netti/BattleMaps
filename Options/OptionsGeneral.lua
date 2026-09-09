@@ -19,7 +19,7 @@ function Options:CreateGeneralPage(parent)
     self.pages.general = page
     page:SetAllPoints(parent)
 
-    local behaviour = MakePanel(page, "Behaviour", 0, -8, 334, 184)
+    local behaviour = MakePanel(page, "Options", 0, -8, 334, 184)
     MakeCheckbox(behaviour, "Show automatically in battlegrounds", 10, -34,
         function() return db.autoShow end,
         function(value) db.autoShow = value end)
@@ -45,7 +45,69 @@ function Options:CreateGeneralPage(parent)
     AddControlTooltip(minimapButtonCheck, "Minimap button",
         "Shows the standard BattleMaps LibDBIcon launcher around the minimap. Left-click opens BattleMaps options. Drag the button to reposition it.")
 
-    local fullMap = MakePanel(page, "Full-screen map", 350, -(appearanceHeight + 24), 334, 156)
+    local battlegroundUI = MakePanel(page, "Battleground UI", 0, -204, 334, 166)
+
+    self.hideMinimapNonEpicBGCheck = MakeCheckbox(battlegroundUI, "Hide minimap (non-epic only)", 10, -34,
+        function() return db.hideMinimapInNonEpicBattlegrounds == true end,
+        function(value)
+            db.hideMinimapInNonEpicBattlegrounds = value == true
+            if BattleMaps.ApplyMinimapVisibility then BattleMaps.ApplyMinimapVisibility() end
+            self:Refresh()
+        end)
+    AddControlTooltip(self.hideMinimapNonEpicBGCheck, "Hide minimap",
+        "Temporarily hides the minimap and its normal chrome in supported non-epic battlegrounds, and in BattleMaps Test mode. Blizzard's minimap frame hierarchy is left intact. Standard LibDBIcon launcher buttons remain visible.")
+
+    self.movePlayerAurasToMinimapCheck = MakeCheckbox(battlegroundUI, "Move player auras", 10, -64,
+        function()
+            if BattleMaps.GetAuraLayoutEnabled then
+                return BattleMaps.GetAuraLayoutEnabled() == true
+            end
+            return db.bgLayoutMovePlayerAuras == true
+        end,
+        function(value)
+            value = value == true
+            if BattleMaps.SetAuraLayoutEnabled then
+                BattleMaps.SetAuraLayoutEnabled(value)
+            else
+                db.bgLayoutMovePlayerAuras = value
+                db.movePlayerAurasToMinimapArea = value
+            end
+        end)
+    AddControlTooltip(self.movePlayerAurasToMinimapCheck, "Move player auras",
+        "When the battleground minimap is hidden, temporarily moves the active player aura frames into that screen area. BattleMaps uses ElvUI's public aura movers when available; otherwise it uses Blizzard's player aura frame. Original anchors are restored after leaving the layout.")
+
+    self.hideObjectiveTrackerCheck = MakeCheckbox(battlegroundUI, "Hide Objective Tracker", 10, -94,
+        function() return db.hideObjectiveTrackerInBattlegrounds == true end,
+        function(value)
+            db.hideObjectiveTrackerInBattlegrounds = value == true
+            if BattleMaps.ApplyObjectiveTrackerVisibility then
+                BattleMaps.ApplyObjectiveTrackerVisibility()
+            end
+        end)
+    AddControlTooltip(self.hideObjectiveTrackerCheck, "Hide Objective Tracker",
+        "Hides Blizzard's Objective Tracker while you are inside a battleground, then restores its previous visibility after leaving.")
+
+    local auraProviderStatus = battlegroundUI:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
+    auraProviderStatus:SetPoint("TOPLEFT", battlegroundUI, "TOPLEFT", 14, -128)
+    auraProviderStatus:SetPoint("TOPRIGHT", battlegroundUI, "TOPRIGHT", -12, -128)
+    auraProviderStatus:SetJustifyH("LEFT")
+
+    battlegroundUI.Refresh = function()
+        local provider = BattleMaps.GetPlayerAuraProviderName and BattleMaps.GetPlayerAuraProviderName() or "Unavailable"
+        local available = BattleMaps.IsPlayerAuraLayoutAvailable and BattleMaps.IsPlayerAuraLayoutAvailable() == true
+        auraProviderStatus:SetText("Aura provider: " .. tostring(provider))
+        if available then
+            auraProviderStatus:SetTextColor(0.25, 1.00, 0.35, 1)
+        else
+            auraProviderStatus:SetTextColor(0.85, 0.45, 0.35, 1)
+        end
+        SetControlEnabled(self.movePlayerAurasToMinimapCheck,
+            available and db.hideMinimapInNonEpicBattlegrounds == true)
+    end
+    self.refreshers[#self.refreshers + 1] = battlegroundUI
+
+
+    local fullMap = MakePanel(page, "World map", 350, -(appearanceHeight + 24), 334, 156)
     self.worldMapIntegrationCheck = MakeCheckbox(fullMap, "Enable BattleMaps on the full-screen map", 10, -34,
         function() return db.enableWorldMapIntegration ~= false end,
         function(value)
@@ -79,7 +141,7 @@ function Options:CreateGeneralPage(parent)
     end
     self.refreshers[#self.refreshers + 1] = fullMap
 
-    local appearance = MakePanel(page, "Map appearance", 350, -8, 334, appearanceHeight)
+    local appearance = MakePanel(page, "Map frame", 350, -8, 334, appearanceHeight)
     self.factionSwapAlertCheck = MakeCheckbox(appearance, "Faction swap alert", 10, -30,
         function() return db.factionSwapAlert ~= false end,
         function(value)
@@ -157,5 +219,5 @@ function Options:CreateGeneralPage(parent)
 end
 
 if Options.RegisterPage then
-    Options:RegisterPage("general", "General", 680, "CreateGeneralPage", 10)
+    Options:RegisterPage("general", "General", 740, "CreateGeneralPage", 10)
 end

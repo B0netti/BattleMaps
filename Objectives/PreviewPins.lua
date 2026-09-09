@@ -4,6 +4,7 @@ if not BattleMaps or not BattleMaps.Pins then return end
 
 local Pins = BattleMaps.Pins
 local Private = Pins.Private or {}
+local Rules = BattleMaps.ObjectiveRules or {}
 
 --[[
 BattleMaps module contract: PreviewPins.lua
@@ -38,6 +39,35 @@ local SetPOITexture = Private.SetPOITexture or function() return false end
 local GetVehicleObjectiveKey = Private.GetVehicleObjectiveKey or function() return "vehicle" end
 local GetAreaPOIIDs = Private.GetAreaPOIIDs or function() return {} end
 local GetCarriedObjectiveTexture = Private.GetCarriedObjectiveTexture or function() return nil end
+
+local function GetPreviewCarriedColorMode(mapID)
+    local settings = BattleMaps.Database and BattleMaps.Database.GetFlagConfig
+        and BattleMaps.Database:GetFlagConfig(mapID)
+        or {}
+    return settings.carriedObjectiveColorMode == "faction" and "faction" or "original"
+end
+
+local function OppositePreviewFaction(faction)
+    if faction == "alliance" then return "horde" end
+    if faction == "horde" then return "alliance" end
+    return nil
+end
+
+local function GetPreviewFactionColor(faction)
+    local color = faction == "alliance" and BattleMaps.COLORS.alliance
+        or faction == "horde" and BattleMaps.COLORS.horde
+        or BattleMaps.COLORS.neutral
+    return color[1] or 1, color[2] or 1, color[3] or 1
+end
+
+local function GetPreviewFlagFactions(mapID, originalFaction)
+    local isCTF = Rules.IsCaptureTheFlagMap and Rules.IsCaptureTheFlagMap(mapID)
+    if not isCTF and Private.IsCaptureTheFlagMap then
+        isCTF = Private.IsCaptureTheFlagMap(mapID)
+    end
+    local carrierFaction = isCTF and OppositePreviewFaction(originalFaction) or originalFaction
+    return originalFaction, carrierFaction, isCTF == true
+end
 local NormalizeObjectiveKey = Private.NormalizeObjectiveKey or function(value)
     local ok, text = pcall(tostring, value or "")
     if not ok or type(text) ~= "string" then return "" end
@@ -919,6 +949,16 @@ function Pins:RefreshDummyPins()
                 end
             end
 
+            -- Offline/edit/Test Mode stationary pins use the same parent-alpha
+            -- rule as live objectives. Callout hover suppression is stored on
+            -- the base pin itself, so preview refreshes must not restore the
+            -- neutral/base texture while the callout is replacing it.
+            if self.ApplyStationaryObjectiveVisualAlpha then
+                self:ApplyStationaryObjectiveVisualAlpha(pin, mapID)
+            elseif pin.BattleMapsCalloutHoverSuppressed == true then
+                pin:SetAlpha(0)
+            end
+
             stationaryUsed = stationaryUsed + 1
         end
     end
@@ -946,13 +986,24 @@ function Pins:RefreshDummyPins()
 
     if showCarriedPreview then
         local cachedFlag = self.previewFlagTextures[mapID]
-        local carriedFaction = self.captureTimerTestFaction == "horde" and "horde" or "alliance"
-        local carriedCustom = GetCarriedObjectiveTexture(self, mapID, 1, cachedFlag, carriedFaction)
+        local originalFaction = self.captureTimerTestFaction == "horde" and "horde" or "alliance"
+        local flagObjectFaction, carrierFaction = GetPreviewFlagFactions(mapID, originalFaction)
+        local colorMode = GetPreviewCarriedColorMode(mapID)
+        local textureFaction = colorMode == "faction" and carrierFaction or flagObjectFaction
+        local carriedCustom = GetCarriedObjectiveTexture(self, mapID, 1, cachedFlag, textureFaction)
+        local tintR, tintG, tintB = 1, 1, 1
+        local tintToCarrier = colorMode == "faction" and carrierFaction ~= nil
+        if tintToCarrier then tintR, tintG, tintB = GetPreviewFactionColor(carrierFaction) end
         SetPreviewTexture(carried, carriedCustom or cachedFlag or profile.carriedTexture,
-            24 * carriedScale, 24 * carriedScale, 1, 1, 1, 1)
-        carried.BattleMapsObjectiveFaction = carriedFaction
+            24 * carriedScale, 24 * carriedScale, tintR, tintG, tintB, 1)
+        if carried.texture and carried.texture.SetDesaturated then
+            carried.texture:SetDesaturated(tintToCarrier)
+        end
+        carried.BattleMapsObjectiveFaction = flagObjectFaction
+        carried.BattleMapsObjectiveCarrierFaction = carrierFaction
+        carried.BattleMapsObjectiveColorMode = colorMode
         self:SetTooltip(carried, profile.carriedTitle,
-            carriedCustom and "Uses the map-specific custom carried-objective texture for the selected test faction."
+            carriedCustom and "Uses the selected carried-objective color mode with map-specific artwork."
                 or cachedFlag and "Uses objective artwork observed for this battleground."
                 or "Uses a battleground-related Blizzard fallback.")
     end
@@ -1004,7 +1055,10 @@ function Pins:RefreshDummyPins()
         return true
     end
 
-    if capabilities.vehicle then
+    -- Moving objectives are gameplay state, not fixed layout landmarks. Keep
+    -- them out of the ordinary unlocked/options preview and show them only in
+    -- the explicit Test Mode sandbox (live pins are handled separately).
+    if testModeActive and capabilities.vehicle then
         if isDeephaulPreview then
             -- Deephaul has a synthetic centre crystal in the normal options
             -- preview.  Show both faction carts only in Test mode so the user
@@ -1032,7 +1086,15 @@ function Pins:RefreshDummyPins()
         -- Test mode moves the carried objective and draws a trail behind it so
         -- the flag/orb trail settings can be tested outside a live battleground.
         if testModeActive then
-            local carriedFaction = self.captureTimerTestFaction == "horde" and "horde" or "alliance"
+            local flagObjectFaction = self.captureTimerTestFaction == "horde" and "horde" or "alliance"
+            local _, carrierFaction = GetPreviewFlagFactions(mapID, flagObjectFaction)
+            local colorMode = GetPreviewCarriedColorMode(mapID)
+            local trailR, trailG, trailB
+            if colorMode == "faction" and carrierFaction then
+                trailR, trailG, trailB = GetPreviewFactionColor(carrierFaction)
+            else
+                trailR, trailG, trailB = GetPreviewFactionColor(flagObjectFaction)
+            end
             self:ApplyCarriedObjectiveFlash(carried)
             if carriedPosition and carriedPosition.loopIndex ~= nil
                 and carried.BattleMapsLastTestTrailLoop ~= carriedPosition.loopIndex then
@@ -1040,10 +1102,16 @@ function Pins:RefreshDummyPins()
                 if self.ClearFlagCarrierTrails then self:ClearFlagCarrierTrails() end
             end
             if self.RecordFlagCarrierTrailPoint and self.RenderFlagCarrierTrails then
-                self:RecordFlagCarrierTrailPoint(1, mapID, carried.mapX, carried.mapY, carriedFaction, carriedScale)
+                self:RecordFlagCarrierTrailPoint(
+                    1, mapID, carried.mapX, carried.mapY, flagObjectFaction, carriedScale,
+                    trailR, trailG, trailB
+                )
                 self:RenderFlagCarrierTrails(1)
             else
-                self:ShowDummyFlagCarrierTrail(carriedFaction, carriedScale, carried.mapX, carried.mapY)
+                self:ShowDummyFlagCarrierTrail(
+                    colorMode == "faction" and carrierFaction or flagObjectFaction,
+                    carriedScale, carried.mapX, carried.mapY
+                )
             end
         else
             self:StopCarriedObjectiveFlash(carried)
@@ -1053,6 +1121,8 @@ function Pins:RefreshDummyPins()
         if carried then
             carried.BattleMapsForceManualCarriedFlash = nil
             carried.BattleMapsObjectiveFaction = nil
+            carried.BattleMapsObjectiveCarrierFaction = nil
+            carried.BattleMapsObjectiveColorMode = nil
             carried.BattleMapsObjectiveMapID = nil
         end
         self:StopCarriedObjectiveFlash(carried)
