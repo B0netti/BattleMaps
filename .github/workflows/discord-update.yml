@@ -9,7 +9,7 @@ on:
         default: BattleMaps update
         type: string
       message:
-        description: Announcement body using Discord Markdown
+        description: 'Announcement body using Discord Markdown (type \n for a new line)'
         required: true
         type: string
 
@@ -42,7 +42,7 @@ jobs:
 
           webhook_url = os.environ.get("DISCORD_WEBHOOK_URL", "").strip()
           title = os.environ.get("UPDATE_TITLE", "").strip()
-          message = os.environ.get("UPDATE_MESSAGE", "").strip()
+          message = os.environ.get("UPDATE_MESSAGE", "").replace(r"\n", "\n").strip()
           repository_url = os.environ.get("REPOSITORY_URL", "").strip()
 
           if not webhook_url:
