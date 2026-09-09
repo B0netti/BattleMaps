@@ -1,27 +1,28 @@
 # BattleMaps
 
-BattleMaps is a World of Warcraft Retail PvP addon that provides a configurable battlefield map with clearer team pins, objective information, timers, notifications, and carried-objective trails.
+BattleMaps is a World of Warcraft Retail PvP addon that provides a configurable battlefield map with clearer team pins, objective information, timers, and notifications.
 
-## Current status
+## Key features
 
-BattleMaps is under active development. The current source version is **3.0.8** and targets World of Warcraft Retail interface **120100**.
+- Improved battleground zone map
+- Improved map and objective textures
+- Improved battleground raid warnings
+- One-click objective callouts to instance chat
+- Healer icons
+- Animated capture timers
+- ElvUI integration
 
-## Highlights
+## Supported battlegrounds
 
-- Independent, movable and scalable Battlefield Map frame
-- Configurable player and team pins, including healer identification and pin layering
-- Layered player field-of-view cone with per-battleground masking and independent scaling
-- Objective, vehicle, flag and capture-state presentation for supported battlegrounds
-- Clickable objective callouts with configurable tactical message templates
-- Capture timers, faction-coloured notifications, pulse and flash effects
-- Configurable notification position, attachment, alignment, width and scale
-- Carried-objective breadcrumbs, glow wakes and spawn tethers on supported maps
-- Test Mode for previewing map layouts and settings outside a live battleground
-- Optional World Map presentation and a provider-aware battleground layout for Blizzard UI or ElvUI
-- Optional non-epic BG HUD layout that hides the minimap and relocates player auras into the freed space
-- Per-map layout locking with persistent position, size, pan and zoom, plus a non-intrusive external hover header
+*Epic Battlegrounds are intentionally not included yet.*
 
-Current objective support includes standard capture bases, Warsong Gulch and Twin Peaks flags, Eye of the Storm, Temple of Kotmogu orbs, Silvershard Mines carts, Deephaul Ravine crystals, and Seething Shore objectives. Client APIs and battleground states can change, so edge cases are still being tested and refined.
+1. Warsong Gulch
+2. Twin Peaks
+3. Eye of the Storm
+4. Temple of Kotmogu
+5. Silvershard Mines
+6. Deephaul Ravine
+7. Seething Shore
 
 ## Installation
 
@@ -35,19 +36,23 @@ Then start or restart World of Warcraft and enable **BattleMaps** in the charact
 
 ## Getting started
 
-- Type `/bmap` to open BattleMaps settings.
-- Use **Test Mode** in the options to preview supported battleground layouts and visual settings.
-- Use `Shift-M` to open Blizzard's native battlefield map.
+- Click the minimap icon or type `/bmap` to open BattleMaps settings.
+- Use **Test Mode** to preview supported battleground layouts and visual settings while outside a battleground.
+- Click the lock icon on the BattleMaps frame to unlock it, then position and resize it as needed.
+
+## Current status
+
+BattleMaps is under active development. The current source version is **3.0.8** and targets World of Warcraft Retail interface **120100**. More features are planned, and user feedback is appreciated.
 
 ## Reporting an issue
 
 Please include:
 
-- BattleMaps version and World of Warcraft client version
-- Battleground and game mode (including Battleground Blitz, where applicable)
-- The objective state involved, such as spawn, pickup, drop, capture, return or respawn
+- BattleMaps version
 - Clear steps to reproduce the issue
-- Any Lua error or `ADDON_ACTION_BLOCKED` message
+- Any Lua error message
+
+Including the World of Warcraft client version, battleground, game mode, and objective state can also help diagnose battleground-specific problems.
 
 Avoid sharing SavedVariables or personal information publicly. SavedVariables are useful diagnostic evidence, but they may contain account-specific data and should not be uploaded unless requested through a private channel.
 
