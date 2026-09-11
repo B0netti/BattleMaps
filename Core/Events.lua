@@ -88,6 +88,7 @@ Events:RegisterEvent("PLAYER_REGEN_ENABLED")
 Events:RegisterEvent("CHAT_MSG_BG_SYSTEM_ALLIANCE")
 Events:RegisterEvent("CHAT_MSG_BG_SYSTEM_HORDE")
 Events:RegisterEvent("CHAT_MSG_BG_SYSTEM_NEUTRAL")
+Events:RegisterEvent("CHAT_MSG_RAID_WARNING")
 Events:RegisterEvent("CHAT_MSG_RAID_BOSS_EMOTE")
 Events:RegisterEvent("RAID_BOSS_EMOTE")
 Events:RegisterEvent("DISPLAY_SIZE_CHANGED")
@@ -119,6 +120,13 @@ Events:SetScript("OnEvent", function(_, event, ...)
 
     if event == "PLAYER_LOGIN" then
         DelayedLocationRefresh()
+    elseif event == "CHAT_MSG_RAID_WARNING" then
+        -- Player-issued /rw remains Blizzard-owned. If a preceding BG-system
+        -- notice temporarily hid RaidWarningFrame to avoid a duplicate, restore
+        -- it immediately so the player's warning uses Blizzard's normal layout.
+        if BattleMaps.Notifications then
+            BattleMaps.Notifications:RestoreNativeDisplayAlpha()
+        end
     elseif event == "CHAT_MSG_BG_SYSTEM_ALLIANCE" or event == "CHAT_MSG_BG_SYSTEM_HORDE" or event == "CHAT_MSG_BG_SYSTEM_NEUTRAL" then
         -- Route all BG objective announcements through the single chained receiver.
         -- Pins.lua owns stationary objective records/timers; ObjectiveTextures.lua
@@ -131,13 +139,15 @@ Events:SetScript("OnEvent", function(_, event, ...)
     elseif event == "CHAT_MSG_RAID_BOSS_EMOTE" or event == "RAID_BOSS_EMOTE" then
         -- Some objective lifecycle notices bypass CHAT_MSG_BG_SYSTEM_*. Route
         -- the raw raid/boss-emote source to the objective renderer first (for
-        -- Deephaul crystal spawn/despawn), then let Notifications layer its
-        -- Kotmogu release handling on the same event.
+        -- Deephaul crystal spawn/despawn), then present the same battleground
+        -- notice through BattleMaps rather than Blizzard's boss-emote layout.
         if BattleMaps.Pins and BattleMaps.Pins.RecordObjectiveRaidNotice then
             BattleMaps.Pins:RecordObjectiveRaidNotice(arg1)
         end
         if BattleMaps.Notifications then
             BattleMaps.Notifications:RecordObjectiveStateFromRaidNotice(arg1)
+
+            BattleMaps.Notifications:ShowBattlegroundMessage(event, arg1)
         end
     elseif event == "PLAYER_ENTERING_WORLD"
         or event == "ZONE_CHANGED_NEW_AREA"

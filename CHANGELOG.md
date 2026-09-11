@@ -2,6 +2,12 @@
 
 ## 3.0.8
 
+- BG system and boss-emote/objective warnings now use the BattleMaps notification frame, including the yellow warning path.
+- Player `/rw` remains Blizzard-owned and immediately restores the normal Blizzard raid-warning presentation.
+- Flag messages support semantic colouring: faction names use their faction colour, carrier names use the acting faction colour, and the remaining sentence stays notification yellow.
+- CTF carrier faction is inferred from the objective action: pickup/drop/capture use the opposing faction; return/recovery use the owning faction.
+- Added short duplicate-event protection for announcements received through multiple BG event paths.
+- Native boss-emote warnings are temporarily suppressed while BattleMaps presents their BG equivalent and restored when BattleMaps no longer owns notifications.
 - Updated clean-install, category-reset, and battleground-specific defaults to the current tuned BattleMaps configuration.
 - Restored Spawn tether, carried-objective color, and per-carrier trail-detail controls on the combined Flags & Carts page.
 - Reordered the main settings navigation to Bases, Flags & Carts, Callouts, then Notifications.

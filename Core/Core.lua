@@ -2065,6 +2065,42 @@ function Notifications:RestoreNativeDisplayAlpha()
     self.nativeDisplayAlpha = nil
 end
 
+function Notifications:SuppressNativeBossEmoteForDisplay(duration)
+    -- Boss-emote battleground notices use a different Blizzard warning frame
+    -- from player /rw. Suppress only that frame while BattleMaps presents the
+    -- objective message, leaving RaidWarningFrame available to players.
+    local frame = _G.RaidBossEmoteFrame
+    if not frame or not frame.GetAlpha or not frame.SetAlpha then return end
+
+    if self.nativeBossEmoteAlpha == nil then
+        local ok, alpha = pcall(frame.GetAlpha, frame)
+        self.nativeBossEmoteAlpha = ok and alpha or 1
+    end
+    pcall(frame.SetAlpha, frame, 0)
+
+    self.nativeBossEmoteSuppressSerial = (self.nativeBossEmoteSuppressSerial or 0) + 1
+    local serial = self.nativeBossEmoteSuppressSerial
+    if C_Timer and C_Timer.After then
+        C_Timer.After(tonumber(duration) or 3.2, function()
+            if Notifications.nativeBossEmoteSuppressSerial ~= serial then return end
+            local native = _G.RaidBossEmoteFrame
+            if native and native.SetAlpha then
+                pcall(native.SetAlpha, native, Notifications.nativeBossEmoteAlpha or 1)
+            end
+            Notifications.nativeBossEmoteAlpha = nil
+        end)
+    end
+end
+
+function Notifications:RestoreNativeBossEmoteDisplayAlpha()
+    self.nativeBossEmoteSuppressSerial = (self.nativeBossEmoteSuppressSerial or 0) + 1
+    local frame = _G.RaidBossEmoteFrame
+    if frame and frame.SetAlpha and self.nativeBossEmoteAlpha ~= nil then
+        pcall(frame.SetAlpha, frame, self.nativeBossEmoteAlpha or 1)
+    end
+    self.nativeBossEmoteAlpha = nil
+end
+
 function Notifications:GetBattlegroundMessageFaction(event, message)
     local faction
     if event == "CHAT_MSG_BG_SYSTEM_ALLIANCE" then
@@ -2116,35 +2152,154 @@ function Notifications:GetBattlegroundMessageFaction(event, message)
     return faction
 end
 
-function Notifications:ShowBattlegroundMessage(event, message)
+function Notifications:GetBattlegroundActorName(message)
+    local text = StripNotificationFormatting(message)
+    if text == "" then return nil end
+
+    -- Most objective strings identify the actor after "by". Keep the capture
+    -- broad enough for connected-realm suffixes, but stop at sentence punctuation.
+    local name = TrimText(text:match("[Bb]y%s+([^!%.]+)%s*[!%.]?$") or "")
+
+    -- A smaller group of flag strings put the carrier/capturer first. These
+    -- patterns intentionally cover objective verbs rather than arbitrary text
+    -- so faction announcements such as "The Horde has assaulted..." are not
+    -- mistaken for player names.
+    if name == "" then
+        local patterns = {
+            "^([^!%.]+)%s+[Cc]aptured%s+",
+            "^([^!%.]+)%s+[Pp]icked%s+up%s+",
+            "^([^!%.]+)%s+[Dd]ropped%s+",
+            "^([^!%.]+)%s+[Rr]eturned%s+",
+            "^([^!%.]+)%s+[Hh]as%s+[Tt]aken%s+",
+            "^([^!%.]+)%s+[Hh]as%s+[Gg]rabbed%s+",
+        }
+        for _, pattern in ipairs(patterns) do
+            name = TrimText(text:match(pattern) or "")
+            if name ~= "" then break end
+        end
+    end
+
+    if name == "" then return nil end
+    local lower = SafeLower(name)
+    if lower == "the alliance" or lower == "alliance"
+        or lower == "the horde" or lower == "horde" then
+        return nil
+    end
+    return name
+end
+
+function Notifications:BuildBattlegroundNotificationText(event, message)
+    local text = StripNotificationFormatting(message)
+    if text == "" then return nil end
+
+    local changed = false
+    local function ColourFactionPhrase(match, faction)
+        local r, g, b = self:GetFactionColor(faction)
+        if not r then return match end
+        changed = true
+        return ColorEscapeRGB(r, g, b, match)
+    end
+
+    -- Colour the faction identity embedded in the sentence independently from
+    -- the acting player. This produces e.g. red "The Horde" plus a blue
+    -- Alliance carrier for a Horde-flag pickup.
+    text = text:gsub("([Tt]he%s+[Aa]lliance)", function(match)
+        return ColourFactionPhrase(match, "ALLIANCE")
+    end)
+    text = text:gsub("([Tt]he%s+[Hh]orde)", function(match)
+        return ColourFactionPhrase(match, "HORDE")
+    end)
+
+    -- Some system strings omit the article and begin directly with the faction.
+    text = text:gsub("^([Aa]lliance)(%s+)", function(match, suffix)
+        return ColourFactionPhrase(match, "ALLIANCE") .. suffix
+    end)
+    text = text:gsub("^([Hh]orde)(%s+)", function(match, suffix)
+        return ColourFactionPhrase(match, "HORDE") .. suffix
+    end)
+
+    local actorFaction = self:GetBattlegroundMessageFaction(event, message)
+    local actorName = self:GetBattlegroundActorName(message)
+    if actorFaction and actorName then
+        local r, g, b = self:GetFactionColor(actorFaction)
+        if r then
+            local colouredName = ColorEscapeRGB(r, g, b, actorName)
+            local count
+            text, count = text:gsub(EscapePattern(actorName), function() return colouredName end, 1)
+            if count and count > 0 then changed = true end
+        end
+    end
+
+    return changed and text or nil
+end
+
+function Notifications:IsDuplicateBattlegroundDisplay(message)
+    local key = NormalizeNotificationText(message)
+    if key == "" then return false end
+
+    local now = GetTime and GetTime() or 0
+    if self.lastBattlegroundDisplayKey == key
+        and now - (self.lastBattlegroundDisplayTime or 0) < 0.25 then
+        return true
+    end
+
+    self.lastBattlegroundDisplayKey = key
+    self.lastBattlegroundDisplayTime = now
+    return false
+end
+
+function Notifications:ShowBattlegroundMessage(event, message, displayTime)
     local settings = GetNotificationSettings()
     if self.customPresentationEnabled ~= true or not settings or settings.enabled ~= true then return end
     if not self:ShouldManage() then return end
     if self:IsRedundantCrystalNotification(message) then return end
-
     if message == nil then return end
+    if self:IsDuplicateBattlegroundDisplay(message) then return end
 
     self:ApplyDisplayLayout()
     local frame = self:EnsureDisplayFrame()
     local r, g, b = self:GetDefaultNotificationTextColor()
+    local displayMessage = message
+
     if settings.colorByFaction ~= false then
-        local messageFaction = self:GetBattlegroundMessageFaction(event, message)
-        if messageFaction then
-            r, g, b = self:GetFactionColor(messageFaction)
+        -- PvP can mark portions of event payloads as restricted. Semantic
+        -- parsing is best-effort; if Blizzard denies a string operation, fall
+        -- back to the established whole-message faction colour path.
+        local formatOK, formatted = pcall(self.BuildBattlegroundNotificationText, self, event, message)
+        if formatOK and formatted then
+            -- Inline colour escapes own the faction/player pieces. Leave the
+            -- unformatted sentence in the ordinary raid-warning yellow.
+            displayMessage = formatted
+        else
+            -- Preserve the existing whole-announcement faction colour for BG
+            -- messages that do not contain independently colourable subjects.
+            local messageFaction = self:GetBattlegroundMessageFaction(event, message)
+            if messageFaction then
+                r, g, b = self:GetFactionColor(messageFaction)
+            end
         end
     end
 
-    local ok = pcall(frame.text.SetText, frame.text, message)
+    local ok = pcall(frame.text.SetText, frame.text, displayMessage)
     if not ok then return end
     frame.text:SetTextColor(r or 1, g or 0.82, b or 0, 1)
     frame:Show()
     frame:Raise()
-    self:SuppressNativeForDisplay(3.2)
+
+    local duration = BattleMaps.Clamp(tonumber(displayTime) or 3.2, 1.0, 10.0)
+    if event == "CHAT_MSG_RAID_BOSS_EMOTE" or event == "RAID_BOSS_EMOTE" then
+        self:SuppressNativeBossEmoteForDisplay(math.max(duration, 10.0))
+    else
+        -- Existing BG-system warnings can also be mirrored into Blizzard's raid
+        -- warning frame. Hide that duplicate, but CHAT_MSG_RAID_WARNING restores
+        -- the native frame immediately so player /rw remains Blizzard-owned.
+        self:SuppressNativeForDisplay(duration)
+    end
 
     self.displaySerial = (self.displaySerial or 0) + 1
     local serial = self.displaySerial
     if C_Timer and C_Timer.After then
-        C_Timer.After(3.2, function()
+        C_Timer.After(duration, function()
             if Notifications.displaySerial ~= serial then return end
             if Notifications.displayFrame then Notifications.displayFrame:Hide() end
         end)
@@ -2458,6 +2613,7 @@ function Notifications:Apply()
         if not shouldManage then
             if self.displayFrame then self.displayFrame:Hide() end
             self:RestoreNativeDisplayAlpha()
+            self:RestoreNativeBossEmoteDisplayAlpha()
         end
     end
 
