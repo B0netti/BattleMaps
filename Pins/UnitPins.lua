@@ -25,6 +25,7 @@ local CUSTOM_HEALER_PIN_TEXTURE = "Interface\\AddOns\\BattleMaps\\Media\\healer.
 
 local DEFAULT_PLAYER_ARROW_TEXTURE = "UI-WorldMapArrow"
 local CUSTOM_PLAYER_ARROW_TEXTURE = "Interface\\AddOns\\BattleMaps\\Media\\player_arrow.tga"
+local TEAM_HOVER_HIT_TEXTURE = "Interface\\AddOns\\BattleMaps\\Media\\team_hover_hit.tga"
 local CUSTOM_PLAYER_COMPASS_TEXTURE = "Interface\\AddOns\\BattleMaps\\Media\\player_compass.tga"
 local PLAYER_FOV_LAYER_TEXTURES = {
     -- Semantic FoV artwork used by the current Sunbeam development stack.
@@ -258,6 +259,7 @@ local PLAYER_FOV_LIVE_MAP_MASK_GEOMETRY = {
 
 local PLAYER_FOV_SUBLEVEL = 1
 local PLAYER_PIN_SUBLEVEL = 5
+local PLAYER_CIRCLE_FILL_SUBLEVEL = 6
 local TEAM_BORDER_SUBLEVEL = 7
 local GROUP_PIN_SUBLEVEL = 8
 local HEALER_OVERLAY_SUBLEVEL = 9
@@ -281,38 +283,39 @@ local TEAM_SPEC_ICON_FRAME_LEVEL_OFFSET = 67
 local TEAM_STACK_SPEC_ICON_FRAME_LEVEL_OFFSET = 68
 local TEAM_STACK_FRAME_LEVEL_OFFSET = TEAM_STACK_UNIT_FRAME_LEVEL_OFFSET
 local PLAYER_FRAME_LEVEL_OFFSET = 69
+local PLAYER_CIRCLE_FILL_FRAME_LEVEL_OFFSET = 70
+local PLAYER_CIRCLE_BORDER_FRAME_LEVEL_OFFSET = 71
 local PLAYER_TEAM_BORDER_FRAME_LEVEL_OFFSET = TEAM_STACK_BORDER_FRAME_LEVEL_OFFSET
-local TEAM_DEATH_MARKER_FRAME_LEVEL_OFFSET = 70
+local TEAM_DEATH_MARKER_FRAME_LEVEL_OFFSET = 72
 local MAX_TEAM_STACK_UNIT_FRAMES = 16
 local TEAM_DEATH_MARKER_DURATION = 10.00
 local TEAM_STATE_POLL_INTERVAL = 0.15
-local TEAM_TOOLTIP_POLL_INTERVAL = 0.02
+local TEAM_TOOLTIP_POLL_INTERVAL = 0.05
 local TEAM_SPEC_INSPECT_INTERVAL = 0.75
 local PLAYER_FOV_BASE_SIZE = 96
 -- The default 420 px map frame leaves a 414 px-wide viewport after its border.
 -- FoV artwork represents map area rather than a readability-sized icon, so
 -- keep its footprint proportional to the fully zoomed canvas width.
 local PLAYER_FOV_REFERENCE_CANVAS_WIDTH = 414
--- These values use the visible alpha bounds of the shipped artwork rather
--- than its source canvas dimensions. Arrow occupies about 58% of its canvas
--- by geometric footprint and Compass about 40%, so this correction keeps both
--- footprints comparable at the same Player-pin size setting. Team Pin uses
--- the Team members setting and the exact same layered metrics as teammates.
-local PLAYER_COMPASS_RENDER_SCALE = 1.47
+-- Team-pin metrics below intentionally reuse the same layered sizing logic for
+-- the player when a circular teammate marker is requested.
 
 local GetUnitStackSlot
 
 local function ConfigureTeamTooltipHitTesting(frame, enabled)
-    -- UnitPositionFrame mouse configuration is secure-sensitive on current
-    -- clients. Calling SetMouseMotionEnabled, SetMouseClickEnabled, or either
-    -- SetPropagateMouse* method can taint Blizzard's Area POI acquisition path
-    -- and later produce ADDON_ACTION_BLOCKED from native map code.
-    --
-    -- BattleMaps therefore leaves every UnitPositionFrame mouse-disabled and
-    -- only performs tooltip hit testing against ordinary BattleMaps-owned pin
-    -- frames whose final coordinates are available to Lua.
-    -- Deliberately no-op. Existing call sites remain as renderer-state
-    -- documentation without mutating the secure frame.
+    -- GetMouseOverUnits() only becomes useful when the UnitPositionFrame is
+    -- participating in mouse-motion hit testing. BattleMaps never needs these
+    -- large canvas-sized frames to receive clicks, so enable motion only and
+    -- leave click handling / button propagation untouched. This preserves map
+    -- dragging and objective clicks while restoring the hover path Blizzard's
+    -- GroupMembers pin normally participates in through MapCanvas.
+    if not frame then return end
+    enabled = enabled == true
+    if type(frame.EnableMouseMotion) == "function" then
+        pcall(frame.EnableMouseMotion, frame, enabled)
+    elseif type(frame.SetMouseMotionEnabled) == "function" then
+        pcall(frame.SetMouseMotionEnabled, frame, enabled)
+    end
 end
 
 local function GetHighestExistingRaidUnit()
@@ -1617,24 +1620,20 @@ function Pins:GetPlayerPinStyle(pinConfig)
     return ({
         default = true,
         arrow = true,
-        compass = true,
+        arrowCircle = true,
         team = true,
     })[style] and style or "arrow"
 end
 
 function Pins:PlayerPinStyleUsesColor(pinConfig)
     local style = self:GetPlayerPinStyle(pinConfig)
-    return style == "arrow" or style == "team"
+    return style == "arrow" or style == "arrowCircle" or style == "team"
 end
 
 function Pins:GetPlayerPinAppearance(pinConfig, playerSize, teamPinSize)
     local style = self:GetPlayerPinStyle(pinConfig)
     playerSize = BattleMaps.Clamp(tonumber(playerSize) or 22, 12, 256)
 
-    if style == "compass" then
-        local size = BattleMaps.Clamp(playerSize * PLAYER_COMPASS_RENDER_SCALE, 12, 384)
-        return { style = style, texture = CUSTOM_PLAYER_COMPASS_TEXTURE, size = size, usesColor = false }
-    end
     if style == "team" then
         local renderedSize = BattleMaps.Clamp(tonumber(teamPinSize) or playerSize, 3, 64)
         local metrics = self:GetTeamPinMetrics(
@@ -1651,6 +1650,26 @@ function Pins:GetPlayerPinAppearance(pinConfig, playerSize, teamPinSize)
             borderTexture = CUSTOM_TEAM_BORDER_TEXTURE,
             borderSize = metrics.borderSize,
             usesColor = true,
+        }
+    end
+    if style == "arrowCircle" then
+        local renderedSize = BattleMaps.Clamp(tonumber(teamPinSize) or 12, 3, 64)
+        local metrics = self:GetTeamPinMetrics(
+            renderedSize,
+            16,
+            renderedSize,
+            nil,
+            pinConfig and pinConfig.teamPinBorderScale
+        )
+        return {
+            style = style,
+            texture = CUSTOM_PLAYER_ARROW_TEXTURE,
+            size = playerSize,
+            usesColor = true,
+            overlayFillTexture = self:GetTeamFillTexture(false, true, false),
+            overlayFillSize = metrics.fillSize,
+            overlayBorderTexture = CUSTOM_TEAM_BORDER_TEXTURE,
+            overlayBorderSize = metrics.borderSize,
         }
     end
     if style == "default" then
@@ -2285,6 +2304,38 @@ function Pins:UpdatePlayerFrameFull(frame)
     frame.needsFullUpdate = false
 end
 
+function Pins:UpdatePlayerCircleFillFrameFull(frame)
+    frame:ClearUnits()
+    if not self:ShouldRenderLivePlayerPosition() then
+        frame:FinalizeUnits()
+        frame.needsFullUpdate = false
+        return
+    end
+    local mapID = self.unitConfigMapID or (BattleMaps.MapFrame and BattleMaps.MapFrame.currentMapID)
+    local pinConfig = BattleMaps.Database:GetUnitsConfig(mapID)
+    local teamSize = BattleMaps.Clamp(
+        (tonumber(pinConfig and pinConfig.teamMemberPinSize) or 12) * self:GetPinZoomScale(),
+        3,
+        64
+    )
+    local appearance = self.unitPlayerAppearance or self:GetPlayerPinAppearance(pinConfig, self.unitPlayerSize or 22, teamSize)
+    if appearance.style == "arrowCircle" and appearance.overlayFillTexture then
+        local r, g, b = self:GetPlayerArrowColor()
+        frame:AddUnit(
+            "player",
+            appearance.overlayFillTexture,
+            appearance.overlayFillSize,
+            appearance.overlayFillSize,
+            r, g, b, 1,
+            PLAYER_CIRCLE_FILL_SUBLEVEL,
+            true
+        )
+    end
+    frame:FinalizeUnits()
+    self:NormalizeUnitFrameCustomTextures(frame)
+    frame.needsFullUpdate = false
+end
+
 function Pins:UpdatePlayerTeamBorderFrameFull(frame)
     frame:ClearUnits()
     if not self:ShouldRenderLivePlayerPosition() then
@@ -2300,12 +2351,18 @@ function Pins:UpdatePlayerTeamBorderFrameFull(frame)
         64
     )
     local appearance = self.unitPlayerAppearance or self:GetPlayerPinAppearance(pinConfig, self.unitPlayerSize or 22, teamSize)
+    local borderTexture, borderSize = nil, nil
     if appearance.style == "team" then
+        borderTexture, borderSize = appearance.borderTexture, appearance.borderSize
+    elseif appearance.style == "arrowCircle" then
+        borderTexture, borderSize = appearance.overlayBorderTexture, appearance.overlayBorderSize
+    end
+    if borderTexture and borderSize then
         frame:AddUnit(
             "player",
-            appearance.borderTexture,
-            appearance.borderSize,
-            appearance.borderSize,
+            borderTexture,
+            borderSize,
+            borderSize,
             1, 1, 1, 1,
             TEAM_BORDER_SUBLEVEL,
             true
@@ -2845,7 +2902,8 @@ function Pins:RenderTeamStackOverlay(entries, canvasWidth, canvasHeight)
     for index, entry in ipairs(entries) do
         local frame = self:AcquireTeamStackPin(index)
         local isPlayer = entry.kind == "player" or entry.unit == "player"
-        local isTeamPlayer = entry.kind == "teamPlayer"
+        local isPlayerCircle = entry.kind == "playerCircle"
+        local isTeamPlayer = entry.kind == "teamPlayer" or isPlayerCircle
         local playerRotation = isPlayer and entry.rotateWithPlayer
             and self:GetPlayerFacingRotation() or 0
         local renderedSizeMaximum = isTeamPlayer and 256 or 128
@@ -2860,7 +2918,10 @@ function Pins:RenderTeamStackOverlay(entries, canvasWidth, canvasHeight)
             frameLevelOffset = entry.behindTeamPins
                 and PLAYER_BEHIND_TEAM_FRAME_LEVEL_OFFSET
                 or PLAYER_FRAME_LEVEL_OFFSET
-            if isTeamPlayer then
+            if isPlayerCircle then
+                frameLevelOffset = PLAYER_CIRCLE_FILL_FRAME_LEVEL_OFFSET
+                borderFrameLevelOffset = PLAYER_CIRCLE_BORDER_FRAME_LEVEL_OFFSET
+            elseif isTeamPlayer then
                 borderFrameLevelOffset = PLAYER_TEAM_BORDER_FRAME_LEVEL_OFFSET
             end
         end
@@ -3120,7 +3181,7 @@ function Pins:RefreshTeamStackTestPreview()
         playerR, playerG, playerB, mode = self:GetPlayerArrowColor()
         self.lastPlayerColorMode = mode
     end
-    table.insert(entries, 1, {
+    local playerEntry = {
         kind = playerAppearance.style == "team" and "teamPlayer" or "player",
         unit = "player",
         displayName = "Player",
@@ -3140,7 +3201,28 @@ function Pins:RefreshTeamStackTestPreview()
         sortKey = 0,
         behindTeamPins = excludePlayerArrow,
         rotateWithPlayer = true,
-    })
+    }
+    table.insert(entries, 1, playerEntry)
+    if playerAppearance.style == "arrowCircle" then
+        table.insert(entries, 2, {
+            kind = "playerCircle",
+            unit = "player",
+            displayName = "Player",
+            x = playerX,
+            y = playerY,
+            offsetX = 0,
+            offsetY = 0,
+            layered = true,
+            borderTexture = playerAppearance.overlayBorderTexture,
+            borderSize = playerAppearance.overlayBorderSize,
+            fillTexture = playerAppearance.overlayFillTexture,
+            fillSize = playerAppearance.overlayFillSize,
+            r = playerR,
+            g = playerG,
+            b = playerB,
+            sortKey = 0,
+        })
+    end
 
     self:RenderTeamStackOverlay(entries, canvasWidth, canvasHeight)
     self:RenderTestFov(pinConfig, playerX, playerY, fovSize, canvasWidth, canvasHeight)
@@ -3271,6 +3353,7 @@ function Pins:SetLivePlayerUnitFramesEnabled(enabled)
     -- Keep every live player-position pass on Blizzard's UnitPositionFrame.
     -- This widget is the supported route for restricted battleground position.
     for _, frame in ipairs({
+        self.playerCircleFillFrame,
         self.playerTeamBorderFrame,
         self.playerFovFrame,
         self.playerFovBeamFrame,
@@ -3291,8 +3374,10 @@ function Pins:SuppressLiveUnitFramesForPreview()
     for _, frame in ipairs({
         self.teamBorderFrame,
         self.unitFrame,
+        self.teamHoverFrame,
         self.healerOverlayFrame,
         self.teamSpecIconFrame,
+        self.playerCircleFillFrame,
         self.playerTeamBorderFrame,
         self.playerFovFrame,
         self.playerFovBeamFrame,
@@ -3309,6 +3394,7 @@ function Pins:SuppressLiveUnitFramesForPreview()
     if self.unitFrame then self:SetNativeGroupPinsVisible(self.unitFrame, true) end
     self:SetLivePlayerUnitFramesEnabled(false)
     for _, frame in ipairs({
+        self.playerCircleFillFrame,
         self.playerTeamBorderFrame,
         self.playerFovFrame,
         self.playerFovBeamFrame,
@@ -4203,13 +4289,10 @@ function Pins:ShowTeamDeathMarkerTest()
     return true
 end
 
-local function AddTooltipUnit(result, seen, unit, displayName, r, g, b, specIcon, specName)
+local function AddTestTooltipUnit(result, seen, unit, displayName, r, g, b)
     local key = unit or displayName
     if not key or seen[key] then return end
     if unit == "player" then return end
-    if unit and UnitExists(unit) then
-        displayName = GetUnitDisplayName(unit) or displayName
-    end
     if not displayName or displayName == "" then return end
     seen[key] = true
     result[#result + 1] = {
@@ -4218,32 +4301,243 @@ local function AddTooltipUnit(result, seen, unit, displayName, r, g, b, specIcon
         r = r or 1,
         g = g or 1,
         b = b or 1,
-        specIcon = specIcon,
-        specName = specName,
     }
 end
 
-local function BuildTeamTooltipName(entry)
-    local name = tostring(entry and entry.name or "Teammate")
-    local icon = entry and entry.specIcon
-    if icon then
-        -- Crop the standard square specialization artwork slightly so its
-        -- transparent edge does not create excess spacing in the tooltip row.
-        return string.format("|T%s:16:16:0:0:64:64:5:59:5:59|t %s", tostring(icon), name)
-    end
-    return name
-end
-
 function Pins:CollectTeamPinTooltipEntries()
-    return {}
+    -- Test Mode owns ordinary frames and therefore resolves its synthetic
+    -- names directly. Live battleground names use Blizzard's native
+    -- UnitPositionFrame tooltip path below instead of a parallel implementation.
+    local result, seen = {}, {}
+    local mapFrame = BattleMaps.MapFrame
+    if not (mapFrame and mapFrame.testMode) then return result end
+    for _, frame in ipairs(self.teamStackPinPool or {}) do
+        if frame.active and not frame.BattleMapsIsPlayer
+            and frame:IsVisible() and frame:IsMouseOver() then
+            AddTestTooltipUnit(result, seen, frame.BattleMapsUnit,
+                frame.BattleMapsDisplayName, frame.BattleMapsTooltipR,
+                frame.BattleMapsTooltipG, frame.BattleMapsTooltipB)
+        end
+    end
+    return result
 end
 
-function Pins:IsTeamTooltipPriorityActive()
+local function IsBattleMapsUnitTooltipOwner(pins, owner)
+    if not owner then return false end
+    if owner == pins.teamHoverFrame then return true end
+    if owner == pins.unitFrame then return true end
+    for _, frame in ipairs(pins.teamStackUnitFrames or {}) do
+        if owner == frame then return true end
+    end
     return false
 end
 
-function Pins:UpdateTeamPinTooltip()
+function Pins:IsTeamTooltipPriorityActive()
+    -- Interactive objective tooltips can still replace this passive Blizzard
+    -- unit tooltip naturally through GameTooltip ownership.
+    return false
+end
+
+function Pins:HideTeamPinTooltip()
     self.teamTooltipHasEntries = false
+    if self.teamNameTooltip then self.teamNameTooltip:Hide() end
+
+    local tooltip = _G.GameTooltip
+    if tooltip and IsBattleMapsUnitTooltipOwner(self, tooltip:GetOwner()) then
+        tooltip:ClearLines()
+        tooltip:Hide()
+    end
+end
+
+function Pins:UpdateTeamPinTooltip()
+    local mapFrame = BattleMaps.MapFrame
+    local viewport = mapFrame and mapFrame.viewport
+    if not viewport or not viewport:IsVisible()
+        or mapFrame.draggingMap or (mapFrame.previewMode and not mapFrame.testMode) then
+        self:HideTeamPinTooltip()
+        return
+    end
+
+    local config = BattleMaps.Database:GetUnitsConfig(mapFrame.currentMapID)
+    if config.showTeamPinNames == false then
+        self:HideTeamPinTooltip()
+        return
+    end
+
+    -- Test Mode owns ordinary frames rather than UnitPositionFrames, so keep
+    -- the lightweight synthetic preview tooltip there only.
+    if mapFrame.testMode then
+        local tooltip = self.teamNameTooltip
+        if not tooltip then
+            tooltip = CreateFrame("GameTooltip", "BattleMapsTeamNameTooltip",
+                self.teamInteractionDriver, "GameTooltipTemplate")
+            self.teamNameTooltip = tooltip
+            tooltip:SetFrameStrata("TOOLTIP")
+        end
+        tooltip:SetFrameLevel(mapFrame.frame:GetFrameLevel() + 100)
+        tooltip:SetOwner(self.teamInteractionDriver, "ANCHOR_CURSOR_RIGHT")
+
+        local entries = self:CollectTeamPinTooltipEntries()
+        if #entries == 0 then
+            tooltip:Hide()
+            self.teamTooltipHasEntries = false
+            return
+        end
+
+        tooltip:ClearLines()
+        for _, entry in ipairs(entries) do
+            tooltip:AddLine(entry.name, entry.r, entry.g, entry.b)
+        end
+        tooltip:Show()
+        self.teamTooltipHasEntries = true
+        return
+    end
+
+    if self.teamNameTooltip then self.teamNameTooltip:Hide() end
+
+    -- Live hover is owned by the dedicated transparent stock UnitPositionFrame.
+    -- The visible BattleMaps renderers are intentionally not queried here: in
+    -- 12.1 their GetMouseOverUnits() result remains empty even when the cursor
+    -- is demonstrably over the frame.
+end
+
+function Pins:GetHoverProbeLabel()
+    if self.hoverProbeLabel then return self.hoverProbeLabel end
+    local mapFrame = BattleMaps.MapFrame
+    local viewport = mapFrame and mapFrame.viewport
+    if not viewport then return nil end
+
+    local label = viewport:CreateFontString(nil, "OVERLAY", "GameFontNormalSmall")
+    label:SetPoint("BOTTOMLEFT", viewport, "BOTTOMLEFT", 8, 8)
+    label:SetJustifyH("LEFT")
+    label:SetTextColor(1, 0.82, 0.2, 1)
+    label:SetText("Hover probe: waiting")
+    label:Hide()
+    self.hoverProbeLabel = label
+    return label
+end
+
+function Pins:SetHoverProbeEnabled(enabled)
+    self.hoverProbeEnabled = enabled == true
+    self.hoverProbeLastHit = nil
+    self.hoverProbeLastCount = nil
+    self.hoverProbeLastFrame = nil
+    local label = self:GetHoverProbeLabel()
+    if label then
+        if self.hoverProbeEnabled then
+            label:SetText("Hover probe: move the cursor over a teammate pin")
+            label:Show()
+        else
+            label:Hide()
+        end
+    end
+    BattleMaps.Chat("Mouseover hover probe " .. (self.hoverProbeEnabled and "enabled." or "disabled."))
+end
+
+function Pins:UpdateHoverProbe(frame, mouseCount, tooltipOwned, state)
+    if self.hoverProbeEnabled ~= true then return end
+    local mapFrame = BattleMaps.MapFrame
+    local viewport = mapFrame and mapFrame.viewport
+    local label = self:GetHoverProbeLabel()
+    if not viewport or not label then return end
+
+    local now = type(GetTime) == "function" and GetTime() or 0
+    mouseCount = tonumber(mouseCount) or 0
+    if mouseCount > 0 then
+        self.hoverProbeLastHit = now
+        self.hoverProbeLastCount = mouseCount
+        self.hoverProbeLastFrame = frame and (frame == self.teamHoverFrame and "hover" or (frame.BattleMapsStackSlot and ("stack " .. tostring(frame.BattleMapsStackSlot)) or "native")) or "?"
+        self.hoverProbeLastOwned = tooltipOwned == true
+    elseif not self.hoverProbeLastHit or (now - self.hoverProbeLastHit) > 0.20 then
+        self.hoverProbeLastCount = 0
+        self.hoverProbeLastFrame = frame and (frame == self.teamHoverFrame and "hover" or (frame.BattleMapsStackSlot and ("stack " .. tostring(frame.BattleMapsStackSlot)) or "native")) or "?"
+        self.hoverProbeLastOwned = tooltipOwned == true
+    end
+
+    local viewportOver = false
+    if type(viewport.IsMouseOver) == "function" then
+        local ok, result = pcall(viewport.IsMouseOver, viewport)
+        viewportOver = ok and result == true
+    end
+    local frameOver = false
+    if frame and type(frame.IsMouseOver) == "function" then
+        local ok, result = pcall(frame.IsMouseOver, frame)
+        frameOver = ok and result == true
+    end
+    local motionFocus = false
+    if frame and type(frame.IsMouseMotionFocus) == "function" then
+        local ok, result = pcall(frame.IsMouseMotionFocus, frame)
+        motionFocus = ok and result == true
+    end
+    label:SetText(string.format(
+        "Hover probe: units=%d  viewport=%s  frameover=%s  motion=%s  tooltip=%s  frame=%s  state=%s",
+        tonumber(self.hoverProbeLastCount) or 0,
+        viewportOver and "yes" or "no",
+        frameOver and "yes" or "no",
+        motionFocus and "yes" or "no",
+        self.hoverProbeLastOwned and "yes" or "no",
+        tostring(self.hoverProbeLastFrame or "?"),
+        tostring(state or "ok")
+    ))
+    label:Show()
+end
+
+function Pins:UpdateLiveUnitFrameTooltip(frame)
+    if not frame then return end
+
+    local tooltip = _G.GameTooltip
+    local mapFrame = BattleMaps.MapFrame
+    local viewport = mapFrame and mapFrame.viewport
+    -- The dedicated hover frame uses Blizzard's stock UnitPositionFrame
+    -- population path with invisible textures. This preserves native restricted
+    -- unit positioning and native tooltip/name resolution while BattleMaps'
+    -- visible stacked renderers remain purely visual.
+    local eligible = true
+    local state = "ok"
+    if not tooltip then
+        eligible, state = false, "no-tooltip"
+    elseif not viewport or not viewport:IsVisible() then
+        eligible, state = false, "viewport-hidden"
+    elseif mapFrame.draggingMap then
+        eligible, state = false, "dragging"
+    elseif mapFrame.testMode then
+        eligible, state = false, "test-mode"
+    elseif mapFrame.previewMode then
+        eligible, state = false, "preview-mode"
+    elseif not self:ShouldRenderLivePlayerPosition() then
+        eligible, state = false, "live-units-hidden"
+    else
+        local config = BattleMaps.Database:GetUnitsConfig(mapFrame.currentMapID)
+        if config.showTeamPinNames == false then
+            eligible, state = false, "names-off"
+        end
+    end
+
+    if not eligible then
+        if tooltip and tooltip:GetOwner() == frame then
+            tooltip:ClearLines()
+            tooltip:Hide()
+        end
+        self:UpdateHoverProbe(frame, 0, false, state)
+        return
+    end
+
+    if frame.UpdatePlayerPins then
+        frame:UpdatePlayerPins()
+    end
+
+    local mouseCount = 0
+    if frame.GetMouseOverUnits then
+        local ok, count = pcall(function()
+            return select("#", frame:GetMouseOverUnits())
+        end)
+        if ok then mouseCount = tonumber(count) or 0 end
+    end
+
+    if frame.UpdateTooltips then
+        frame:UpdateTooltips(tooltip)
+    end
+    self:UpdateHoverProbe(frame, mouseCount, tooltip:GetOwner() == frame, frame == self.teamHoverFrame and "native-hover" or state)
 end
 
 function Pins:InitializeTeamInteractionDriver(parent)
@@ -4251,6 +4545,8 @@ function Pins:InitializeTeamInteractionDriver(parent)
     local driver = CreateFrame("Frame", nil, parent)
     self.teamInteractionDriver = driver
     driver.elapsedState = 0
+    driver.elapsedTooltip = 0
+    driver:SetScript("OnHide", function() self:HideTeamPinTooltip() end)
     driver:RegisterEvent("UNIT_HEALTH")
     driver:RegisterEvent("UNIT_FLAGS")
     driver:RegisterEvent("UNIT_CONNECTION")
@@ -4275,8 +4571,18 @@ function Pins:InitializeTeamInteractionDriver(parent)
     end)
     driver:SetScript("OnUpdate", function(_, elapsed)
         driver.elapsedState = driver.elapsedState + elapsed
+        driver.elapsedTooltip = driver.elapsedTooltip + elapsed
         local now = type(GetTime) == "function" and GetTime() or 0
 
+        if driver.elapsedTooltip >= TEAM_TOOLTIP_POLL_INTERVAL then
+            driver.elapsedTooltip = 0
+            local mapFrame = BattleMaps.MapFrame
+            if mapFrame and mapFrame.testMode then
+                self:UpdateTeamPinTooltip()
+            elseif self.teamNameTooltip then
+                self.teamNameTooltip:Hide()
+            end
+        end
         if driver.elapsedState >= TEAM_STATE_POLL_INTERVAL then
             driver.elapsedState = 0
             self:UpdateTeamDeathTracking(now)
@@ -4338,6 +4644,41 @@ function Pins:InitializeUnitFrames(parent)
     unitFrame:SetAlpha(0)
     unitFrame:Show()
 
+    -- Dedicated native hover layer. Do not override UpdateFull/UpdatePeriodic:
+    -- the stock UnitPositionFrameMixin must populate this frame itself so its
+    -- native GetMouseOverUnits() hit test remains available. The texture is a
+    -- fully transparent addon asset; only the native pin geometry/tooltip path
+    -- is used.
+    local teamHoverFrame = CreateFrame(
+        "UnitPositionFrame",
+        "BattleMapsTeamHoverFrame",
+        parent,
+        "UnitPositionFrameTemplate"
+    )
+    self.teamHoverFrame = teamHoverFrame
+    teamHoverFrame.BattleMapsPins = self
+    teamHoverFrame:SetFrameLevel(parent:GetFrameLevel() + UNIT_FRAME_LEVEL_OFFSET + 1)
+    teamHoverFrame.UpdateAppearanceData = function(frame)
+        UnitPositionFrameMixin.UpdateAppearanceData(frame)
+        frame:SetPinTexture("party", TEAM_HOVER_HIT_TEXTURE)
+        frame:SetPinTexture("raid", TEAM_HOVER_HIT_TEXTURE)
+    end
+    teamHoverFrame:SetPinTexture("party", TEAM_HOVER_HIT_TEXTURE)
+    teamHoverFrame:SetPinTexture("raid", TEAM_HOVER_HIT_TEXTURE)
+    teamHoverFrame:SetShouldShowUnits("player", false)
+    teamHoverFrame:SetShouldShowUnits("party", true)
+    teamHoverFrame:SetShouldShowUnits("raid", true)
+    teamHoverFrame:SetUseClassColor("party", false)
+    teamHoverFrame:SetUseClassColor("raid", false)
+    teamHoverFrame:SetMouseOverUnitExcluded("player", true)
+    teamHoverFrame:SetNeedsPeriodicUpdate(false)
+    teamHoverFrame:SetAlpha(1)
+    ConfigureTeamTooltipHitTesting(teamHoverFrame, true)
+    teamHoverFrame:SetScript("OnUpdate", function(frame)
+        frame.BattleMapsPins:UpdateLiveUnitFrameTooltip(frame)
+    end)
+    teamHoverFrame:Show()
+
     local healerOverlayFrame = CreateFrame(
         "UnitPositionFrame",
         "BattleMapsHealerOverlayFrame",
@@ -4385,6 +4726,27 @@ function Pins:InitializeUnitFrames(parent)
     playerTeamBorderFrame:SetShouldShowUnits("raid", false)
     playerTeamBorderFrame:SetAlpha(0)
     playerTeamBorderFrame:Show()
+
+    local playerCircleFillFrame = CreateFrame(
+        "UnitPositionFrame",
+        "BattleMapsPlayerCircleFillFrame",
+        parent,
+        "UnitPositionFrameTemplate"
+    )
+    self.playerCircleFillFrame = playerCircleFillFrame
+    playerCircleFillFrame.BattleMapsPins = self
+    playerCircleFillFrame.UpdateFull = function(frame)
+        frame.BattleMapsPins:UpdatePlayerCircleFillFrameFull(frame)
+    end
+    playerCircleFillFrame.UpdatePeriodic = function() end
+    playerCircleFillFrame:SetFrameLevel(parent:GetFrameLevel() + PLAYER_CIRCLE_FILL_FRAME_LEVEL_OFFSET)
+    playerCircleFillFrame:SetPinSubLevel("player", PLAYER_CIRCLE_FILL_SUBLEVEL)
+    playerCircleFillFrame:SetUseClassColor("player", false)
+    playerCircleFillFrame:SetShouldShowUnits("player", false)
+    playerCircleFillFrame:SetShouldShowUnits("party", false)
+    playerCircleFillFrame:SetShouldShowUnits("raid", false)
+    playerCircleFillFrame:SetAlpha(0)
+    playerCircleFillFrame:Show()
 
     local function CreatePlayerFovFrame(layer, frameName)
         local fovFrame = CreateFrame(
@@ -4451,8 +4813,10 @@ function Pins:LayoutUnitFrame()
     local frames = {
         { frame = self.teamBorderFrame, level = TEAM_BORDER_FRAME_LEVEL_OFFSET, key = "teamBorderFrameAnchored" },
         { frame = self.unitFrame, level = UNIT_FRAME_LEVEL_OFFSET, key = "unitFrameAnchored" },
+        { frame = self.teamHoverFrame, level = UNIT_FRAME_LEVEL_OFFSET + 1, key = "teamHoverFrameAnchored" },
         { frame = self.healerOverlayFrame, level = HEALER_OVERLAY_FRAME_LEVEL_OFFSET, key = "healerOverlayFrameAnchored" },
         { frame = self.teamSpecIconFrame, level = TEAM_SPEC_ICON_FRAME_LEVEL_OFFSET, key = "teamSpecIconFrameAnchored", specOffset = true },
+        { frame = self.playerCircleFillFrame, level = PLAYER_CIRCLE_FILL_FRAME_LEVEL_OFFSET, key = "playerCircleFillFrameAnchored" },
         { frame = self.playerTeamBorderFrame, level = self.playerTeamBorderFrameLevelOffset or PLAYER_TEAM_BORDER_FRAME_LEVEL_OFFSET, key = "playerTeamBorderFrameAnchored" },
         { frame = self.playerFovFrame, key = "playerFovFrameAnchored", fovLayer = "under" },
         { frame = self.playerFovBeamFrame, key = "playerFovBeamFrameAnchored", fovLayer = "beam" },
@@ -4548,8 +4912,10 @@ function Pins:RefreshUnits(forceFullUpdate)
         for _, frame in ipairs({
             self.teamBorderFrame,
             self.unitFrame,
+            self.teamHoverFrame,
             self.healerOverlayFrame,
             self.teamSpecIconFrame,
+            self.playerCircleFillFrame,
             self.playerTeamBorderFrame,
             self.playerFovFrame,
             self.playerFovBeamFrame,
@@ -4566,6 +4932,7 @@ function Pins:RefreshUnits(forceFullUpdate)
     -- Older running builds may have hidden these frames while suppressing the
     -- Test Mode duplicate. Repair that state before an ordinary map refresh.
     for _, frame in ipairs({
+        self.playerCircleFillFrame,
         self.playerTeamBorderFrame,
         self.playerFovFrame,
         self.playerFovBeamFrame,
@@ -4591,7 +4958,14 @@ function Pins:RefreshUnits(forceFullUpdate)
     local playerFrameLevelOffset = pinConfig.excludePlayerArrowFromStack == true
         and PLAYER_BEHIND_TEAM_FRAME_LEVEL_OFFSET
         or PLAYER_FRAME_LEVEL_OFFSET
-    local playerTeamBorderFrameLevelOffset = PLAYER_TEAM_BORDER_FRAME_LEVEL_OFFSET
+    local zoomScale = self:GetPinZoomScale()
+    local teamSize = BattleMaps.Clamp((tonumber(pinConfig.teamMemberPinSize) or 12) * zoomScale, 3, 64)
+    local playerSize = BattleMaps.Clamp((tonumber(pinConfig.playerArrowSize) or 22) * zoomScale, 12, 256)
+    local playerAppearance = self:GetPlayerPinAppearance(pinConfig, playerSize, teamSize)
+    local playerStyle = playerAppearance.style
+    local playerTeamBorderFrameLevelOffset = playerStyle == "arrowCircle"
+        and PLAYER_CIRCLE_BORDER_FRAME_LEVEL_OFFSET
+        or PLAYER_TEAM_BORDER_FRAME_LEVEL_OFFSET
     if self.playerArrowFrameLevelOffset ~= playerFrameLevelOffset then
         self.playerArrowFrameLevelOffset = playerFrameLevelOffset
         if self.playerFrame then
@@ -4604,12 +4978,27 @@ function Pins:RefreshUnits(forceFullUpdate)
             self.playerTeamBorderFrame:SetFrameLevel(self.parent:GetFrameLevel() + playerTeamBorderFrameLevelOffset)
         end
     end
-    local zoomScale = self:GetPinZoomScale()
-    local teamSize = BattleMaps.Clamp((tonumber(pinConfig.teamMemberPinSize) or 12) * zoomScale, 3, 64)
-    local playerSize = BattleMaps.Clamp((tonumber(pinConfig.playerArrowSize) or 22) * zoomScale, 12, 256)
-    local playerAppearance = self:GetPlayerPinAppearance(pinConfig, playerSize, teamSize)
     local fovStyle = self:GetPlayerFovStyle(pinConfig)
     local fovSize = self:GetPlayerFovSize(pinConfig, self:GetPlayerFovMapScale())
+    -- The invisible stock hover pin is slightly enlarged so it still covers a
+    -- teammate after BattleMaps applies its small visual stack offset. The
+    -- geometry remains centered on Blizzard's authoritative native position.
+    local hoverPadding = 4
+    if pinConfig.stackTeamPins ~= false then
+        local stackOverlap = BattleMaps.Clamp(tonumber(pinConfig.teamPinStackOverlap) or 30, 0, 80)
+        local _, currentStackMaxOffset = GetTeamStackGeometry(teamSize, stackOverlap)
+        hoverPadding = math.max(4, (tonumber(currentStackMaxOffset) or 0) * 2)
+    end
+    local hoverPinSize = BattleMaps.Clamp(teamSize + hoverPadding, teamSize, 96)
+    if self.teamHoverPinSize ~= hoverPinSize then
+        self.teamHoverPinSize = hoverPinSize
+        if self.teamHoverFrame then
+            self.teamHoverFrame:SetPinSize("party", hoverPinSize)
+            self.teamHoverFrame:SetPinSize("raid", hoverPinSize)
+            self.teamHoverFrame:SetNeedsFullUpdate()
+        end
+        forceFullUpdate = true
+    end
     local teamBorderScale = self:GetTeamPinBorderScale(pinConfig)
     local healerPinStyle = self:GetHealerPinStyle(pinConfig)
     local healerSettingSize = tonumber(pinConfig.healerPinSize) or 16
@@ -4629,8 +5018,10 @@ function Pins:RefreshUnits(forceFullUpdate)
         for _, frame in ipairs({
             self.teamBorderFrame,
             self.unitFrame,
+            self.teamHoverFrame,
             self.healerOverlayFrame,
             self.teamSpecIconFrame,
+            self.playerCircleFillFrame,
             self.playerTeamBorderFrame,
             self.playerFovFrame,
             self.playerFovBeamFrame,
@@ -4655,15 +5046,23 @@ function Pins:RefreshUnits(forceFullUpdate)
         playerAppearance.style,
         tostring(playerAppearance.size),
         tostring(playerAppearance.borderSize or 0),
+        tostring(playerAppearance.overlayFillSize or 0),
+        tostring(playerAppearance.overlayBorderSize or 0),
         tostring(playerAppearance.texture or ""),
+        tostring(playerAppearance.borderTexture or ""),
+        tostring(playerAppearance.overlayFillTexture or ""),
+        tostring(playerAppearance.overlayBorderTexture or ""),
     }, ":")
     self.unitPlayerAppearance = playerAppearance
     if self.unitPlayerSize ~= playerSize or self.unitPlayerAppearanceKey ~= playerAppearanceKey then
         self.unitPlayerSize = playerSize
         self.unitPlayerAppearanceKey = playerAppearanceKey
         if self.playerFrame then self.playerFrame:SetPinSize("player", playerAppearance.size) end
+        if self.playerCircleFillFrame then
+            self.playerCircleFillFrame:SetPinSize("player", playerAppearance.overlayFillSize or playerAppearance.size)
+        end
         if self.playerTeamBorderFrame then
-            self.playerTeamBorderFrame:SetPinSize("player", playerAppearance.borderSize or playerAppearance.size)
+            self.playerTeamBorderFrame:SetPinSize("player", playerAppearance.overlayBorderSize or playerAppearance.borderSize or playerAppearance.size)
         end
         forceFullUpdate = true
     end
@@ -4708,10 +5107,12 @@ function Pins:RefreshUnits(forceFullUpdate)
     end
 
     local showNativeTeam = not useTeamStackUnitFrames
-    ConfigureTeamTooltipHitTesting(unitFrame, showNativeTeam)
+    ConfigureTeamTooltipHitTesting(unitFrame, false)
+    ConfigureTeamTooltipHitTesting(self.teamHoverFrame, true)
     ConfigureTeamTooltipHitTesting(self.teamBorderFrame, false)
     ConfigureTeamTooltipHitTesting(self.healerOverlayFrame, false)
     ConfigureTeamTooltipHitTesting(self.teamSpecIconFrame, false)
+    ConfigureTeamTooltipHitTesting(self.playerCircleFillFrame, false)
     ConfigureTeamTooltipHitTesting(self.playerTeamBorderFrame, false)
     ConfigureTeamTooltipHitTesting(self.playerFovFrame, false)
     ConfigureTeamTooltipHitTesting(self.playerFovBeamFrame, false)
@@ -4725,8 +5126,10 @@ function Pins:RefreshUnits(forceFullUpdate)
         for _, frame in ipairs({
             self.teamBorderFrame,
             self.unitFrame,
+            self.teamHoverFrame,
             self.healerOverlayFrame,
             self.teamSpecIconFrame,
+            self.playerCircleFillFrame,
             self.playerTeamBorderFrame,
             self.playerFovFrame,
             self.playerFovBeamFrame,
@@ -4741,6 +5144,21 @@ function Pins:RefreshUnits(forceFullUpdate)
         for _, collection in ipairs({ self.teamStackBorderFrames, self.teamStackUnitFrames, self.teamStackHealerOverlayFrames, self.teamStackSpecIconFrames }) do
             if type(collection) == "table" then
                 for _, frame in ipairs(collection) do frame:SetNeedsFullUpdate() end
+            end
+        end
+    end
+
+    if self.teamHoverFrame then
+        local showHoverFrame = renderLivePlayerPosition and pinConfig.showTeamPinNames ~= false
+        self.teamHoverFrame:SetAlpha(showHoverFrame and 1 or 0)
+        if showHoverFrame then
+            if not self.teamHoverFrame:IsShown() then self.teamHoverFrame:Show() end
+            self.teamHoverFrame:UpdatePlayerPins()
+        else
+            local tooltip = _G.GameTooltip
+            if tooltip and tooltip:GetOwner() == self.teamHoverFrame then
+                tooltip:ClearLines()
+                tooltip:Hide()
             end
         end
     end
@@ -4779,9 +5197,19 @@ function Pins:RefreshUnits(forceFullUpdate)
     else
         self:HideFovClipDiagnostic()
     end
+    if self.playerCircleFillFrame then
+        local showPlayerCircleFill = renderLivePlayerPosition
+            and self.unitPlayerAppearance and self.unitPlayerAppearance.style == "arrowCircle"
+        self.playerCircleFillFrame:SetAlpha(showPlayerCircleFill and 1 or 0)
+        self.playerCircleFillFrame:UpdatePlayerPins()
+        if showPlayerCircleFill then
+            self:NormalizeUnitFrameCustomTextures(self.playerCircleFillFrame)
+        end
+    end
     if self.playerTeamBorderFrame then
         local showPlayerTeamBorder = renderLivePlayerPosition
-            and self.unitPlayerAppearance and self.unitPlayerAppearance.style == "team"
+            and self.unitPlayerAppearance
+            and (self.unitPlayerAppearance.style == "team" or self.unitPlayerAppearance.style == "arrowCircle")
         self.playerTeamBorderFrame:SetAlpha(showPlayerTeamBorder and 1 or 0)
         self.playerTeamBorderFrame:UpdatePlayerPins()
         if showPlayerTeamBorder then

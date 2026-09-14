@@ -2,8 +2,8 @@ local addonName, BattleMaps = ...
 
 _G.BattleMaps = BattleMaps
 BattleMaps.addonName = addonName
-BattleMaps.VERSION = "3.0.8"
-BattleMaps.BUILD = "3.0.8"
+BattleMaps.VERSION = "3.0.19"
+BattleMaps.BUILD = "3.0.19"
 
 BattleMaps.COLORS = {
     red = { 0.77, 0.17, 0.16 },
@@ -1268,6 +1268,23 @@ SlashCmdList.BATTLEMAPS = function(message)
         if BattleMaps.WorldMapIntegration
             and BattleMaps.WorldMapIntegration.PrintValidationSnapshot then
             BattleMaps.WorldMapIntegration:PrintValidationSnapshot()
+        end
+    elseif command == "hoverprobe" or command == "mouseoverprobe" then
+        local requested
+        if argument == "on" or argument == "enable" or argument == "enabled" then
+            requested = true
+        elseif argument == "off" or argument == "disable" or argument == "disabled" then
+            requested = false
+        elseif argument == "" or argument == "toggle" then
+            requested = not (BattleMaps.Pins and BattleMaps.Pins.hoverProbeEnabled == true)
+        else
+            BattleMaps.Chat("Usage: /bmap hoverprobe [on|off].")
+            return
+        end
+        if BattleMaps.Pins and BattleMaps.Pins.SetHoverProbeEnabled then
+            BattleMaps.Pins:SetHoverProbeEnabled(requested)
+        else
+            BattleMaps.Chat("Mouseover hover probe is unavailable.")
         end
     elseif message == "rostercheck" or message == "teamcheck" then
         if BattleMaps.Pins and BattleMaps.Pins.PrintTeamRosterDebug then

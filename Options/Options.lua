@@ -171,7 +171,7 @@ function Options:GetSettingsPageDefinitions()
         { key = "units", label = "Units", height = 680, createMethod = "CreateUnitsPage", order = 20 },
         { key = "bases", label = "Bases", height = 800, createMethod = "CreateBasesPage", order = 30 },
         { key = "flags", label = "Flags & Carts", height = 600, createMethod = "CreateFlagsPage", order = 35 },
-        { key = "callouts", label = "Callouts", height = 560, createMethod = "CreateCalloutsPage", order = 40 },
+        { key = "callouts", label = "Callouts", height = 640, createMethod = "CreateCalloutsPage", order = 40 },
         { key = "notifications", label = "Notifications", height = 650, createMethod = "CreateNotificationsPage", order = 50 },
     }
 end
@@ -347,6 +347,22 @@ function Options:EnsureMapEditMode()
     local mapFrame = BattleMaps.MapFrame
     if not mapFrame or not mapFrame.frame or not mapFrame.frame:IsShown() then return end
     if not mapFrame.editMode then mapFrame:BeginEdit() end
+end
+
+function Options:RefreshMapLockButton()
+    local button = self.mapLockButton
+    if not button then return end
+    local mapFrame = BattleMaps.MapFrame
+    local unlocked = mapFrame and mapFrame.editMode == true
+    button:SetNormalTexture(unlocked
+        and "Interface\\Buttons\\LockButton-Unlocked-Up"
+        or "Interface\\Buttons\\LockButton-Locked-Up")
+    button:SetPushedTexture(unlocked
+        and "Interface\\Buttons\\LockButton-Unlocked-Down"
+        or "Interface\\Buttons\\LockButton-Locked-Down")
+    for _, texture in ipairs({ button:GetNormalTexture(), button:GetPushedTexture() }) do
+        if texture then texture:SetTexCoord(0.08, 0.92, 0.08, 0.92) end
+    end
 end
 
 function Options:ShowColorPickerAboveOptions(settings, preserveDynamicClassContext)
@@ -649,16 +665,32 @@ end
 
 function Options:OpenObjectiveTimerTextColorPicker()
     local settings = self:GetTimerTarget()
-    self:OpenDynamicClassColorPicker({
-        getMode = function() return settings.objectiveTimerTextColorMode end,
-        setMode = function(mode) settings.objectiveTimerTextColorMode = mode end,
-        getColor = function() return settings.objectiveTimerTextColor end,
-        setColor = function(color) settings.objectiveTimerTextColor = color end,
-        refresh = function()
-            self:Refresh()
-            if BattleMaps.Pins and BattleMaps.Pins.RefreshObjectiveTimerTextSettings then
-                BattleMaps.Pins:RefreshObjectiveTimerTextSettings()
-            end
+    local saved = type(settings.objectiveTimerTextColor) == "table" and settings.objectiveTimerTextColor or {}
+    local previous = {
+        r = BattleMaps.Clamp(tonumber(saved.r or saved[1]) or 1, 0, 1),
+        g = BattleMaps.Clamp(tonumber(saved.g or saved[2]) or 1, 0, 1),
+        b = BattleMaps.Clamp(tonumber(saved.b or saved[3]) or 1, 0, 1),
+    }
+    local previousMode = settings.objectiveTimerTextColorMode
+    local function RefreshTimerColor()
+        self:Refresh()
+        if BattleMaps.Pins and BattleMaps.Pins.RefreshObjectiveTimerTextSettings then
+            BattleMaps.Pins:RefreshObjectiveTimerTextSettings()
+        end
+    end
+    local function ApplyColor()
+        local r, g, b = ColorPickerFrame:GetColorRGB()
+        settings.objectiveTimerTextColor = { r = r, g = g, b = b }
+        settings.objectiveTimerTextColorMode = "custom"
+        RefreshTimerColor()
+    end
+    self:ShowColorPickerAboveOptions({
+        r = previous.r, g = previous.g, b = previous.b, hasOpacity = false,
+        swatchFunc = ApplyColor,
+        cancelFunc = function()
+            settings.objectiveTimerTextColor = previous
+            settings.objectiveTimerTextColorMode = previousMode
+            RefreshTimerColor()
         end,
     })
 end
@@ -1015,6 +1047,34 @@ function Options:CreateMapSelector(frame)
     local test = MakeButton(selector, "Test", 58, 24)
     self.mapTestButton = test
     test:SetPoint("RIGHT", reset, "LEFT", -6, 0)
+
+    local lock = CreateFrame("Button", nil, selector)
+    self.mapLockButton = lock
+    lock:SetSize(24, 24)
+    lock:SetPoint("RIGHT", test, "LEFT", -6, 0)
+    lock:SetHighlightTexture("Interface\\Buttons\\ButtonHilight-Square", "ADD")
+    lock:SetScript("OnClick", function()
+        local mapFrame = BattleMaps.MapFrame
+        if not mapFrame then return end
+        if mapFrame.editMode then mapFrame:CommitEdit() else mapFrame:BeginEdit() end
+        self:RefreshMapLockButton()
+    end)
+    lock:HookScript("OnEnter", function(owner)
+        local mapFrame = BattleMaps.MapFrame
+        GameTooltip:SetOwner(owner, "ANCHOR_RIGHT")
+        if mapFrame and mapFrame.editMode then
+            GameTooltip:SetText("Lock map layout", 1, 0.82, 0.40)
+            GameTooltip:AddLine("Save the current size, position, pan, and zoom.", 0.86, 0.86, 0.86, true)
+        else
+            GameTooltip:SetText("Unlock map layout", 1, 0.82, 0.40)
+            GameTooltip:AddLine("Enable map layout editing.", 0.86, 0.86, 0.86, true)
+        end
+        GameTooltip:Show()
+    end)
+    lock:HookScript("OnLeave", function(owner)
+        if GameTooltip:GetOwner() == owner then GameTooltip:Hide() end
+    end)
+    self:RefreshMapLockButton()
     test:RegisterForClicks("LeftButtonUp", "RightButtonUp")
     test:SetScript("OnClick", function(_, mouseButton)
         if self:IsSelectedMapTestActive() then
@@ -1551,6 +1611,7 @@ function Options:Refresh()
     SetControlEnabled(self.combatTeamCheck, true)
     local unitsSettings = self:GetUnitsTarget()
     local playerStyleUsesColor = unitsSettings.playerPinStyle == "arrow"
+        or unitsSettings.playerPinStyle == "arrowCircle"
         or unitsSettings.playerPinStyle == "team"
     local playerStyleUsesTeamSize = unitsSettings.playerPinStyle == "team"
     SetControlEnabled(self.playerColorControl, playerStyleUsesColor)
@@ -1631,8 +1692,11 @@ function Options:Refresh()
     SetControlEnabled(self.objectiveTimerTextFontDropdown, objectiveTimerTextSettingsEnabled)
     SetControlEnabled(self.objectiveTimerTextOffsetXSlider, objectiveTimerTextSettingsEnabled)
     SetControlEnabled(self.objectiveTimerTextOffsetYSlider, objectiveTimerTextSettingsEnabled)
-    SetControlEnabled(self.objectiveTimerTextColorControl, objectiveTimerTextSettingsEnabled)
+    SetControlEnabled(self.objectiveTimerTextCustomColorCheck, objectiveTimerTextSettingsEnabled)
+    SetControlEnabled(self.objectiveTimerTextColorControl,
+        objectiveTimerTextSettingsEnabled and timerSettings.objectiveTimerTextColorMode == "custom")
     self:RefreshMapTestButton()
+    self:RefreshMapLockButton()
     SetControlEnabled(self.mapTestButton, not BattleMaps.IsInLiveBattleground())
     SetControlEnabled(self.objectivePulseCheck, captureMapSupported and captureTimerEnabled)
     SetControlEnabled(self.objectiveCaptureAfterPulseAlphaSlider,

@@ -31,7 +31,7 @@ if packageVersion then BattleMaps.VERSION = packageVersion end
 -- Published builds use the package version directly. Feature-specific build
 -- suffixes are reserved for internal/test packages and should not leak into
 -- release login/version reporting.
-BattleMaps.BUILD = tostring(BattleMaps.VERSION or packageVersion or "3.0.8")
+BattleMaps.BUILD = tostring(BattleMaps.VERSION or packageVersion or "3.0.19")
 
 Callouts.DEFAULTS = {
     enabled = true,
@@ -44,21 +44,35 @@ Callouts.DEFAULTS = {
         attack = "ATTACK [node]",
         defend = "DEF [node_full]",
         clear = "[node] CLEAR",
+        custom1 = "CUSTOM [node]",
+        custom2 = "CUSTOM [node_full]",
+    },
+    bindings = {
+        incoming = "NONE",
+        attack = "ALT",
+        defend = "SHIFT",
+        clear = "CTRL",
+        custom1 = "ALT_SHIFT",
+        custom2 = "ALT_CTRL",
     },
 }
 
-Callouts.ACTION_ORDER = { "incoming", "attack", "defend", "clear" }
+Callouts.ACTION_ORDER = { "incoming", "attack", "defend", "clear", "custom1", "custom2" }
 Callouts.ACTION_LABELS = {
     incoming = "Incoming",
     attack = "Attack",
     defend = "Defend",
     clear = "Clear",
+    custom1 = "Custom 1",
+    custom2 = "Custom 2",
 }
 Callouts.ACTION_TEXTURES = {
     incoming = "Interface\\AddOns\\BattleMaps\\Media\\Callouts\\INC.tga",
     attack = "Interface\\AddOns\\BattleMaps\\Media\\Callouts\\ATTACK.tga",
     defend = "Interface\\AddOns\\BattleMaps\\Media\\Callouts\\DEFEND.tga",
     clear = "Interface\\AddOns\\BattleMaps\\Media\\Callouts\\CLEAR.tga",
+    custom1 = "Interface\\Icons\\INV_Misc_Note_01",
+    custom2 = "Interface\\Icons\\INV_Misc_Note_02",
 }
 
 -- Temporary compatibility paths while existing prototype media is moved into
@@ -78,6 +92,12 @@ local RELEASE_SETTLE_DURATION = 0.10
 local CONFIRM_HOLD_DURATION = 0.14
 local CONFIRM_FADE_DURATION = 0.46
 local GLOW_FADE_DURATION = 0.52
+local PING_FLIPBOOK_DURATION = 0.75
+local PING_FLIPBOOK_SCALE = 2.10
+local PING_FLIPBOOK_ATLAS = "UI-HUD-ActionBar-GCD-Flipbook"
+local PING_FLIPBOOK_ROWS = 11
+local PING_FLIPBOOK_COLUMNS = 2
+local PING_FLIPBOOK_FRAMES = 22
 local CHOICE_ICON_MIN_SIZE = 1
 
 local ACTION_GLOW_COLORS = {
@@ -85,6 +105,8 @@ local ACTION_GLOW_COLORS = {
     attack = { 1.00, 0.18, 0.10 },
     defend = { 0.25, 0.62, 1.00 },
     clear = { 0.30, 1.00, 0.42 },
+    custom1 = { 1.00, 0.70, 0.18 },
+    custom2 = { 0.72, 0.42, 1.00 },
 }
 
 local MAPS = {
@@ -150,26 +172,75 @@ for _, map in ipairs(MAPS) do
     end
 end
 
-local MODE_ACTIONS = {
-    NONE = "incoming",
-    ALT = "attack",
-    SHIFT = "defend",
-    CTRL = "clear",
-}
+local MODE_ORDER = { "NONE", "ALT", "SHIFT", "CTRL", "ALT_SHIFT", "ALT_CTRL", "CTRL_SHIFT", "ALT_CTRL_SHIFT" }
 local MODE_BINDING_LABELS = {
     NONE = "Click",
     ALT = "Alt + Click",
     SHIFT = "Shift + Click",
     CTRL = "Ctrl + Click",
+    ALT_SHIFT = "Alt + Shift + Click",
+    ALT_CTRL = "Alt + Ctrl + Click",
+    CTRL_SHIFT = "Ctrl + Shift + Click",
+    ALT_CTRL_SHIFT = "Alt + Ctrl + Shift + Click",
+}
+local MODE_SECURE_PREFIX = {
+    NONE = "",
+    ALT = "alt-",
+    SHIFT = "shift-",
+    CTRL = "ctrl-",
+    ALT_SHIFT = "alt-shift-",
+    ALT_CTRL = "alt-ctrl-",
+    CTRL_SHIFT = "ctrl-shift-",
+    ALT_CTRL_SHIFT = "alt-ctrl-shift-",
 }
 
+function Callouts:GetBindingChoices()
+    local choices = {}
+    for _, mode in ipairs(MODE_ORDER) do
+        choices[#choices + 1] = { value = mode, label = MODE_BINDING_LABELS[mode] }
+    end
+    return choices
+end
+
+function Callouts:GetActionBinding(actionKey)
+    local settings = self:GetSettings()
+    return settings.bindings and settings.bindings[actionKey] or self.DEFAULTS.bindings[actionKey]
+end
+
 function Callouts:GetActionBindingLabel(actionKey)
-    for mode, mappedActionKey in pairs(MODE_ACTIONS) do
-        if mappedActionKey == actionKey then
-            return MODE_BINDING_LABELS[mode] or ""
+    return MODE_BINDING_LABELS[self:GetActionBinding(actionKey)] or ""
+end
+
+function Callouts:GetActionForMode(mode)
+    mode = mode or "NONE"
+    local settings = self:GetSettings()
+    for _, actionKey in ipairs(self.ACTION_ORDER) do
+        if settings.bindings and settings.bindings[actionKey] == mode then return actionKey end
+    end
+    return nil
+end
+
+function Callouts:SetActionBinding(actionKey, mode)
+    if not self.DEFAULTS.bindings[actionKey] or not MODE_BINDING_LABELS[mode] then return false end
+    if InCombatLockdown and InCombatLockdown() then
+        if BattleMaps.Chat then BattleMaps.Chat("Callout bindings can only be changed out of combat.") end
+        return false
+    end
+    local settings = self:GetSettings()
+    settings.bindings = type(settings.bindings) == "table" and settings.bindings or {}
+    for key, value in pairs(self.DEFAULTS.bindings) do
+        if settings.bindings[key] == nil then settings.bindings[key] = value end
+    end
+    local previous = settings.bindings[actionKey]
+    for _, otherKey in ipairs(self.ACTION_ORDER) do
+        if otherKey ~= actionKey and settings.bindings[otherKey] == mode then
+            settings.bindings[otherKey] = previous
+            break
         end
     end
-    return ""
+    settings.bindings[actionKey] = mode
+    self:RequestSecureRefresh()
+    return true
 end
 
 local function Clamp(value, minimum, maximum)
@@ -210,6 +281,23 @@ function Callouts:GetSettings()
     db.callouts.iconScale = Clamp(db.callouts.iconScale, 0.25, 1.50)
     db.callouts.iconOffsetX = Clamp(db.callouts.iconOffsetX, -60, 60)
     db.callouts.iconOffsetY = Clamp(db.callouts.iconOffsetY, -60, 60)
+    db.callouts.bindings = CopyDefaults(self.DEFAULTS.bindings, db.callouts.bindings)
+    local used = {}
+    for _, actionKey in ipairs(self.ACTION_ORDER) do
+        local mode = db.callouts.bindings[actionKey]
+        if not MODE_BINDING_LABELS[mode] or used[mode] then
+            local preferred = self.DEFAULTS.bindings[actionKey]
+            if MODE_BINDING_LABELS[preferred] and not used[preferred] then
+                mode = preferred
+            else
+                for _, candidate in ipairs(MODE_ORDER) do
+                    if not used[candidate] then mode = candidate; break end
+                end
+            end
+            db.callouts.bindings[actionKey] = mode
+        end
+        used[mode] = true
+    end
     return db.callouts
 end
 
@@ -279,9 +367,17 @@ function Callouts:GetActionTexture(actionKey)
 end
 
 function Callouts:GetCurrentModifierMode()
-    if IsAltKeyDown and IsAltKeyDown() then return "ALT" end
-    if IsShiftKeyDown and IsShiftKeyDown() then return "SHIFT" end
-    if IsControlKeyDown and IsControlKeyDown() then return "CTRL" end
+    local alt = IsAltKeyDown and IsAltKeyDown() == true
+    local shift = IsShiftKeyDown and IsShiftKeyDown() == true
+    local ctrl = IsControlKeyDown and IsControlKeyDown() == true
+    if alt and ctrl and shift then return "ALT_CTRL_SHIFT" end
+    if alt and shift and not ctrl then return "ALT_SHIFT" end
+    if alt and ctrl and not shift then return "ALT_CTRL" end
+    if ctrl and shift and not alt then return "CTRL_SHIFT" end
+    if alt and not shift and not ctrl then return "ALT" end
+    if shift and not alt and not ctrl then return "SHIFT" end
+    if ctrl and not alt and not shift then return "CTRL" end
+    if not alt and not shift and not ctrl then return "NONE" end
     return nil
 end
 
@@ -389,6 +485,85 @@ local function CreateChoiceVisual(name)
     glow.Texture = glowTexture
     frame.Glow = glow
 
+    -- Experimental Blizzard flipbook pulse. Keep this separate from the
+    -- existing icon confirmation + additive icon glow so both treatments can
+    -- be evaluated simultaneously in live BG testing. We deliberately use an
+    -- ordinary texture/FlipBook animation rather than Blizzard's protected
+    -- Ping System display frames.
+    local ping = CreateFrame("Frame", name .. "PingFlipbook", UIParent)
+    ping:SetFrameStrata("TOOLTIP")
+    ping:SetFrameLevel(148)
+    ping:SetSize(48, 48)
+    ping:Hide()
+    ping:SetAlpha(1)
+
+    local pingContent = CreateFrame("Frame", nil, ping)
+    pingContent:SetPoint("CENTER", ping, "CENTER")
+    pingContent:SetSize(48, 48)
+    pingContent:SetScale(1)
+    pingContent:SetAlpha(1)
+    ping.Content = pingContent
+
+    local pingTexture = pingContent:CreateTexture(nil, "ARTWORK")
+    pingTexture:SetAllPoints(pingContent)
+    pingTexture:SetBlendMode("ADD")
+    pingTexture:SetVertexColor(1, 1, 1, 1)
+    local pingAtlasAvailable = false
+    if C_Texture and C_Texture.GetAtlasInfo then
+        local ok, atlasInfo = pcall(C_Texture.GetAtlasInfo, PING_FLIPBOOK_ATLAS)
+        pingAtlasAvailable = ok and atlasInfo ~= nil
+    else
+        pingAtlasAvailable = true
+    end
+    if pingAtlasAvailable and pingTexture.SetAtlas then
+        local ok = pcall(pingTexture.SetAtlas, pingTexture, PING_FLIPBOOK_ATLAS, false)
+        pingAtlasAvailable = ok
+    end
+    ping.Texture = pingTexture
+    ping.available = pingAtlasAvailable
+    frame.PingFlipbook = ping
+
+    if pingAtlasAvailable then
+        local pingAnimation = pingContent:CreateAnimationGroup()
+        local flip = pingAnimation:CreateAnimation("FlipBook")
+        flip:SetOrder(1)
+        flip:SetDuration(PING_FLIPBOOK_DURATION)
+        flip:SetFlipBookRows(PING_FLIPBOOK_ROWS)
+        flip:SetFlipBookColumns(PING_FLIPBOOK_COLUMNS)
+        flip:SetFlipBookFrames(PING_FLIPBOOK_FRAMES)
+
+        local pingScale = pingAnimation:CreateAnimation("Scale")
+        pingScale:SetOrder(1)
+        pingScale:SetDuration(PING_FLIPBOOK_DURATION)
+        pingScale:SetSmoothing("OUT")
+        pingScale:SetScaleFrom(0.82, 0.82)
+        pingScale:SetScaleTo(1.18, 1.18)
+
+        local pingFade = pingAnimation:CreateAnimation("Alpha")
+        pingFade:SetOrder(1)
+        pingFade:SetDuration(PING_FLIPBOOK_DURATION)
+        pingFade:SetFromAlpha(0.95)
+        pingFade:SetToAlpha(0)
+        pingFade:SetSmoothing("IN")
+
+        pingAnimation:SetScript("OnPlay", function()
+            pingContent:SetScale(1)
+            pingContent:SetAlpha(0.95)
+            ping:Show()
+        end)
+        pingAnimation:SetScript("OnFinished", function()
+            pingContent:SetScale(1)
+            pingContent:SetAlpha(1)
+            ping:Hide()
+        end)
+        pingAnimation:SetScript("OnStop", function()
+            pingContent:SetScale(1)
+            pingContent:SetAlpha(1)
+            ping:Hide()
+        end)
+        ping.Animation = pingAnimation
+    end
+
     local confirm = content:CreateAnimationGroup()
 
     local settle = confirm:CreateAnimation("Scale")
@@ -471,17 +646,28 @@ local function CreateChoiceVisual(name)
 end
 
 function Callouts:BuildCallouts(node)
-    return {
-        ["macrotext1"] = "/instance " .. self:ResolveMessage("incoming", node),
-        ["alt-macrotext1"] = "/instance " .. self:ResolveMessage("attack", node),
-        ["shift-macrotext1"] = "/instance " .. self:ResolveMessage("defend", node),
-        ["ctrl-macrotext1"] = "/instance " .. self:ResolveMessage("clear", node),
-    }
+    local result = {}
+    local settings = self:GetSettings()
+    for _, actionKey in ipairs(self.ACTION_ORDER) do
+        local mode = settings.bindings and settings.bindings[actionKey]
+        local prefix = MODE_SECURE_PREFIX[mode]
+        if prefix then
+            result[prefix .. "macrotext1"] = "/instance " .. self:ResolveMessage(actionKey, node)
+        end
+    end
+    return result
 end
 
 function Callouts:ApplySecureAttributes(ui)
     if not ui or not ui.button then return false end
     if InCombatLockdown and InCombatLockdown() then return false end
+    for _, mode in ipairs(MODE_ORDER) do
+        local prefix = MODE_SECURE_PREFIX[mode]
+        -- Define every supported modifier combination explicitly. Otherwise an
+        -- unassigned combination falls through to the unmodified click action.
+        ui.button:SetAttribute(prefix .. "type1", "macro")
+        ui.button:SetAttribute(prefix .. "macrotext1", "")
+    end
     local callouts = self:BuildCallouts(ui.node)
     for attribute, value in pairs(callouts) do
         ui.button:SetAttribute(attribute:gsub("macrotext", "type"), "macro")
@@ -584,7 +770,7 @@ function Callouts:CreateNodeUI(node, index)
         Callouts.hoveredUI = ui
         local mode = Callouts:GetCurrentModifierMode() or "NONE"
         Callouts.currentMode = mode
-        local actionKey = MODE_ACTIONS[mode] or MODE_ACTIONS.NONE or "incoming"
+        local actionKey = Callouts:GetActionForMode(mode) or "incoming"
         Callouts:SetChoiceAction(ui.visual, actionKey)
         Callouts:SetBaseHoverSuppressed(ui, true)
 
@@ -700,6 +886,15 @@ function Callouts:PositionChoiceVisual(ui, x, y, iconSize, offsetX, offsetY)
             ui.visual.Glow:ClearAllPoints()
             ui.visual.Glow:SetPoint("CENTER", UIParent, "BOTTOMLEFT", visualX, visualY)
         end
+        if ui.visual.PingFlipbook then
+            local pingSize = iconSize * PING_FLIPBOOK_SCALE
+            ui.visual.PingFlipbook:SetSize(pingSize, pingSize)
+            if ui.visual.PingFlipbook.Content then
+                ui.visual.PingFlipbook.Content:SetSize(pingSize, pingSize)
+            end
+            ui.visual.PingFlipbook:ClearAllPoints()
+            ui.visual.PingFlipbook:SetPoint("CENTER", UIParent, "BOTTOMLEFT", visualX, visualY)
+        end
     end
 end
 
@@ -766,7 +961,21 @@ function Callouts:SetNodeEnabled(ui, enabled)
         self:SetBaseHoverSuppressed(ui, false)
         ui.container:Hide()
         ui.pin = nil
-        if ui.visual and not ui.visual.animationBusy then ui.visual:Hide() end
+        if ui.visual then
+            if ui.visual.ConfirmAnimation and ui.visual.ConfirmAnimation:IsPlaying() then
+                ui.visual.ConfirmAnimation:Stop()
+            end
+            if ui.visual.Glow and ui.visual.Glow.Animation and ui.visual.Glow.Animation:IsPlaying() then
+                ui.visual.Glow.Animation:Stop()
+            end
+            if ui.visual.PingFlipbook and ui.visual.PingFlipbook.Animation
+                and ui.visual.PingFlipbook.Animation:IsPlaying() then
+                ui.visual.PingFlipbook.Animation:Stop()
+            end
+            ui.visual:Hide()
+            if ui.visual.Glow then ui.visual.Glow:Hide() end
+            if ui.visual.PingFlipbook then ui.visual.PingFlipbook:Hide() end
+        end
     end
 end
 
@@ -775,10 +984,13 @@ function Callouts:SetChoiceAction(visual, actionKey)
     visual.actionKey = actionKey
     local texturePath = self:GetActionTexture(actionKey)
     visual.Texture:SetTexture(texturePath)
+    local color = ACTION_GLOW_COLORS[actionKey] or { 1, 1, 1 }
     if visual.Glow and visual.Glow.Texture then
         visual.Glow.Texture:SetTexture(texturePath)
-        local color = ACTION_GLOW_COLORS[actionKey] or { 1, 1, 1 }
         visual.Glow.Texture:SetVertexColor(color[1], color[2], color[3], 1)
+    end
+    if visual.PingFlipbook and visual.PingFlipbook.Texture then
+        visual.PingFlipbook.Texture:SetVertexColor(color[1], color[2], color[3], 1)
     end
 
     -- Modifier polling runs every 0.05s. Preserve an active depressed state
@@ -810,6 +1022,10 @@ function Callouts:HideChoiceVisuals(ui)
     if ui.visual and ui.visual.Glow and ui.visual.Glow.Animation
         and not ui.visual.Glow.Animation:IsPlaying() then
         ui.visual.Glow:Hide()
+    end
+    if ui.visual and ui.visual.PingFlipbook and ui.visual.PingFlipbook.Animation
+        and not ui.visual.PingFlipbook.Animation:IsPlaying() then
+        ui.visual.PingFlipbook:Hide()
     end
 end
 
@@ -873,7 +1089,7 @@ function Callouts:UpdateModifierChoices()
         return
     end
 
-    local actionKey = MODE_ACTIONS[mode] or MODE_ACTIONS.NONE
+    local actionKey = self:GetActionForMode(mode)
     if not actionKey then
         self:HideChoiceVisuals(ui)
         return
@@ -904,6 +1120,10 @@ function Callouts:PlayChosenConfirmation(visual, ui, actionKey)
     if visual.Glow and visual.Glow.Animation and visual.Glow.Animation:IsPlaying() then
         visual.Glow.Animation:Stop()
     end
+    if visual.PingFlipbook and visual.PingFlipbook.Animation
+        and visual.PingFlipbook.Animation:IsPlaying() then
+        visual.PingFlipbook.Animation:Stop()
+    end
 
     self:SetChoiceAction(visual, actionKey or visual.actionKey or "incoming")
     visual.pressed = false
@@ -919,6 +1139,9 @@ function Callouts:PlayChosenConfirmation(visual, ui, actionKey)
     if visual.Glow and visual.Glow.Animation then
         visual.Glow.Animation:Play()
     end
+    if visual.PingFlipbook and visual.PingFlipbook.Animation then
+        visual.PingFlipbook.Animation:Play()
+    end
     if visual.ConfirmAnimation then
         visual.ConfirmAnimation:Play()
     else
@@ -929,7 +1152,7 @@ end
 function Callouts:HandleSecureCalloutClick(ui, mouseButton)
     if not ui or mouseButton ~= "LeftButton" then return end
     local mode = self:GetCurrentModifierMode() or "NONE"
-    local actionKey = MODE_ACTIONS[mode] or MODE_ACTIONS.NONE
+    local actionKey = self:GetActionForMode(mode)
     if not actionKey then return end
     self:PlayChosenConfirmation(ui.visual, ui, actionKey)
 end

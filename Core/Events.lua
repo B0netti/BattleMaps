@@ -128,6 +128,10 @@ Events:SetScript("OnEvent", function(_, event, ...)
             BattleMaps.Notifications:RestoreNativeDisplayAlpha()
         end
     elseif event == "CHAT_MSG_BG_SYSTEM_ALLIANCE" or event == "CHAT_MSG_BG_SYSTEM_HORDE" or event == "CHAT_MSG_BG_SYSTEM_NEUTRAL" then
+        -- Keep BattleMaps completely out of arena/Solo Shuffle warning handling.
+        -- These event names may be observed outside a real battleground.
+        if not (BattleMaps.IsInLiveBattleground and BattleMaps.IsInLiveBattleground()) then return end
+
         -- Route all BG objective announcements through the single chained receiver.
         -- Pins.lua owns stationary objective records/timers; ObjectiveTextures.lua
         -- extends that same receiver for Deephaul/CTF/EotS-specific state.
@@ -137,6 +141,10 @@ Events:SetScript("OnEvent", function(_, event, ...)
             BattleMaps.Notifications:ShowBattlegroundMessage(event, arg1)
         end
     elseif event == "CHAT_MSG_RAID_BOSS_EMOTE" or event == "RAID_BOSS_EMOTE" then
+        -- Raid/boss emotes are shared by many instance types. Only consume them
+        -- for objective tracking while actually inside a live battleground.
+        if not (BattleMaps.IsInLiveBattleground and BattleMaps.IsInLiveBattleground()) then return end
+
         -- Some objective lifecycle notices bypass CHAT_MSG_BG_SYSTEM_*. Route
         -- the raw raid/boss-emote source to the objective renderer first (for
         -- Deephaul crystal spawn/despawn), then present the same battleground

@@ -34,7 +34,7 @@ local function SizeLockButtonArtwork(button)
     -- a similar visible weight while retaining the same 32px click target.
     for _, texture in ipairs({ button:GetNormalTexture(), button:GetPushedTexture() }) do
         if texture then
-            texture:SetTexCoord(0.14, 0.86, 0.14, 0.86)
+            texture:SetTexCoord(0.08, 0.92, 0.08, 0.92)
         end
     end
 end
@@ -671,8 +671,6 @@ function MapFrame:SetChromeRequested(enabled)
 end
 
 function MapFrame:ToggleChromeRequested()
-    local db = BattleMaps.Database:Get()
-    if db.fadeMapHeader == false then return end
     self:SetChromeRequested(not self.chromeRequested)
 end
 
@@ -694,8 +692,7 @@ function MapFrame:UpdateChromeFade(elapsed, force)
     local pointerOverMap = self:IsPointerOverFrame()
     local contextMenuOpen = (self.contextMenu and self.contextMenu:IsShown())
         or (self.nativeContextMenu and self.nativeContextMenu.IsShown and self.nativeContextMenu:IsShown())
-    local shouldShow = db.fadeMapHeader == false
-        or self.editMode
+    local shouldShow = self.editMode
         or pointerOverMap
         or contextMenuOpen
     local target = shouldShow and 1 or 0
@@ -1567,6 +1564,9 @@ function MapFrame:SetEditMode(enabled)
     end
     SizeLockButtonArtwork(self.lockButton)
     self:UpdateChromeFade(0, true)
+    if BattleMaps.Options and BattleMaps.Options.RefreshMapLockButton then
+        BattleMaps.Options:RefreshMapLockButton()
+    end
 end
 
 function MapFrame:ClampPan(config)

@@ -1,5 +1,72 @@
 # BattleMaps changelog
 
+## 3.0.19
+
+- Fixed the Player Arrow **Pin** and **FoV** dropdown button widths so both use the same explicit width and align visually.
+- Widened the FoV dropdown to match the Pin dropdown and comfortably fit labels such as **Combined**.
+- Matched the Combined player-circle layering in Test Mode to live rendering and excluded that circle from teammate mouseover names.
+- Stopped the native teammate hover layer from updating when live unit rendering is inactive.
+- Synchronized the source and README version labels with the release metadata.
+
+## 3.0.18
+
+- Tidied the Units panel: **Pin style** is now **Pin**, **Arrow + circle** is now **Combined**, and the Pin/FoV dropdown buttons now align to the same width.
+- Increased spacing between the two left-side Team Units checkboxes.
+- Reworked the secondary Lock/Unlock control beside Test to use Blizzard's complete lock-button artwork directly instead of nesting that artwork inside another button.
+- Spread the Notifications controls vertically across the available page space, with more separation between notification toggles, placement rows, offsets, and appearance controls.
+- Retains the 3.0.17 native hover-layer experiment for live teammate mouseover testing.
+
+## 3.0.17
+
+- Replaced teammate-name hover detection with a dedicated invisible stock UnitPositionFrame populated entirely by Blizzard's native mixin.
+- The hover layer uses transparent pin artwork and Blizzard's own GetMouseOverUnits/UpdateTooltips path, while BattleMaps' visible stacked pins remain unchanged.
+- Enlarged the invisible hover geometry slightly to cover BattleMaps stack offsets without changing visible team-pin size.
+- Kept `/bmap hoverprobe`; the diagnostic frame now reports `frame=hover` and `state=native-hover` when the new layer is active.
+
+## 3.0.16
+
+- Enabled mouse-motion hit testing on the teammate UnitPositionFrames without enabling mouse clicks, targeting the `GetMouseOverUnits()` = 0 failure confirmed by the live hover probe.
+- Expanded `/bmap hoverprobe` with frame-over and mouse-motion-focus state so the hover pipeline can be verified directly in a battleground.
+
+## 3.0.15
+
+- Removed BattleMaps' extra `viewport:IsMouseOver()` gate from live teammate tooltip processing; Blizzard's native `UnitPositionFrame:GetMouseOverUnits()` is now the sole hover authority, matching the stock GroupMembersPin behavior more closely.
+- Added `/bmap hoverprobe` for live diagnosis. While enabled, a small map label reports the native mouseover-unit count, whether the viewport itself reports mouseover, whether the native frame owns `GameTooltip`, and which unit-position frame is being tested.
+
+## 3.0.14
+
+- Reworked live teammate mouseover names to match Blizzard's current GroupMembersPin execution model: each active UnitPositionFrame now refreshes `UpdatePlayerPins()` and then runs native `UpdateTooltips(GameTooltip)` from its own `OnUpdate` while the map is hovered.
+- Removed live tooltip polling from the separate BattleMaps interaction driver; that driver now handles synthetic Test Mode names only.
+- Retained the Player Pin naming cleanup: the standalone team-style player marker is labeled **Circle**.
+
+## 3.0.13
+
+- Renamed the standalone **Team** player-pin style to **Circle** for clearer wording.
+- Reworked live teammate mouseover names to use Blizzard's native `UnitPositionFrameMixin:UpdateTooltips(GameTooltip)` path directly, including BattleMaps' full World Map presentation.
+- Removed the incorrect live `GetMouseOverUnits()` -> `GameTooltip:SetUnit()` interpretation; Test Mode retains its synthetic preview tooltip only.
+
+## 3.0.12
+
+- Removed the Compass entry from Player Pins and replaced it with **Arrow + circle**.
+- Arrow + circle now layers the BattleMaps player arrow with a same-position team pin above it, so the arrow remains readable while the circular teammate marker stays visible on top.
+- Existing saved Compass selections migrate to Arrow + circle automatically.
+
+## 3.0.11
+
+- Added an experimental Blizzard flipbook pulse behind the existing callout confirmation icon/glow so both click-feedback styles can be evaluated together.
+- Restored live teammate mouseover tooltips by passing UnitPositionFrame mouseover tokens directly to Blizzard's native unit-tooltip renderer instead of resolving names/classes in addon Lua.
+- Kept Test Mode synthetic mouseover names and colours for preview-only pins.
+
+## 3.0.10
+
+- Merged the 3.0.9 Solo Shuffle hardening: BG-system and boss-emote objective processing now exits unless BattleMaps is in a live battleground, keeping arena/Shuffle warnings out of BattleMaps.
+- Added a second map lock/unlock control beside Test and tightened the title-bar padlock artwork to visually match the close button.
+- Simplified the General panel by making map-header hover fading standard behavior and removing its redundant checkbox.
+- Tidied teammate healer controls: the selector now sits in the center column under **Healers**, with **Icon**, **Icon + circle**, and **Ignore** choices.
+- Objective timer text now uses adaptive white/yellow/red urgency coloring by default; **Custom color** opts back into a fixed user-selected color.
+- Expanded node callouts to six configurable actions with **Custom 1** and **Custom 2**, plus editable modifier-click bindings with conflict swapping.
+- Restored optional class-coloured teammate mouseover names using the native pin hit-test query, without changing UnitPositionFrame mouse handling. Includes stacked pins and Test Mode; live battleground validation is still required.
+
 ## 3.0.8
 
 - BG system and boss-emote/objective warnings now use the BattleMaps notification frame, including the yellow warning path.

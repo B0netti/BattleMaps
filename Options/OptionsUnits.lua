@@ -72,13 +72,13 @@ function Options:CreateUnitsPage(parent)
     self.playerTeamPinSizeNote:SetTextColor(0.96, 0.85, 0.64, 1)
     self.playerTeamPinSizeNote:Hide()
 
-    self.playerPinStyleDropdown = MakeDropdown(player, "Pin style", 10, -30, 180,
+    self.playerPinStyleDropdown = MakeDropdown(player, "Pin", 10, -30, 180,
         function()
             return {
                 { value = "default", label = "Blizzard" },
                 { value = "arrow", label = "Arrow" },
-                { value = "compass", label = "Compass" },
-                { value = "team", label = "Team" },
+                { value = "arrowCircle", label = "Combined" },
+                { value = "team", label = "Circle" },
             }
         end,
         function() return self:GetUnitsTarget().playerPinStyle or "arrow" end,
@@ -86,14 +86,16 @@ function Options:CreateUnitsPage(parent)
             self:GetUnitsTarget().playerPinStyle = ({
                 default = true,
                 arrow = true,
-                compass = true,
+                arrowCircle = true,
                 team = true,
             })[value] and value or "arrow"
             if BattleMaps.Pins then BattleMaps.Pins:RefreshGroup() end
         end,
         true)
-    AddControlTooltip(self.playerPinStyleDropdown, "Pin style",
-        "Selects the player marker artwork: Blizzard's default arrow, the BattleMaps arrow or compass, or the layered team-pin treatment.")
+    self.playerPinStyleDropdown.button:SetWidth(120)
+    self.playerPinStyleDropdown.menu:SetWidth(120)
+    AddControlTooltip(self.playerPinStyleDropdown, "Pin",
+        "Selects the player marker artwork: Blizzard's default arrow, the BattleMaps arrow, Combined (arrow with the teammate circle layered above it), or Circle by itself.")
 
     self.playerFovStyleDropdown = MakeDropdown(player, "FoV", 10, -84, 180,
         function()
@@ -125,8 +127,8 @@ function Options:CreateUnitsPage(parent)
             if BattleMaps.Pins then BattleMaps.Pins:RefreshGroup() end
         end,
         true)
-    self.playerFovStyleDropdown.button:SetWidth(96)
-    self.playerFovStyleDropdown.menu:SetWidth(96)
+    self.playerFovStyleDropdown.button:SetWidth(120)
+    self.playerFovStyleDropdown.menu:SetWidth(120)
     AddControlTooltip(self.playerFovStyleDropdown, "FoV",
         "Selects a field-of-view preset. Each preset uses one to three authored texture layers. Selecting a preset sets map texture opacity to 80% with an opaque black background. All FoV artwork retains its authored colors and does not receive mouse input.")
 
@@ -162,6 +164,15 @@ function Options:CreateUnitsPage(parent)
     AddControlTooltip(self.combatTeamCheck, "Solid out of combat",
         "Uses the dot-free team fill while a teammate is out of combat. Entering combat switches ordinary teammates to the centre-dot fill. Healers keep their dedicated healer fill in both states.")
 
+    self.teamPinNamesCheck = MakeCheckbox(team, "Mouseover names", 10, -72,
+        function() return self:GetUnitsTarget().showTeamPinNames ~= false end,
+        function(value)
+            self:GetUnitsTarget().showTeamPinNames = value
+            if BattleMaps.Pins then BattleMaps.Pins:UpdateTeamPinTooltip() end
+        end)
+    AddControlTooltip(self.teamPinNamesCheck, "Mouseover names",
+        "Shows Blizzard's native teammate tooltip when hovering live team pins. BattleMaps does not resolve or recolour live unit names; Test Mode keeps its synthetic preview names.")
+
     self.teamMemberSizeSlider = MakeSlider(team, "Team Members", 210, -30, 3, 32, 1,
         function() return tonumber(self:GetUnitsTarget().teamMemberPinSize) or 12 end,
         function(value)
@@ -190,11 +201,11 @@ function Options:CreateUnitsPage(parent)
     AddControlTooltip(self.healerSizeSlider, "Healer icon size",
         "Scales the healer icon relative to its standard size. 100% is the default size.")
 
-    self.healerPinStyleDropdown = MakeDropdown(team, "Healer icon style", 10, -84, 180,
+    self.healerPinStyleDropdown = MakeDropdown(team, "Healers", 210, -84, 250,
         function()
             return {
-                { value = "circle", label = "Icon inside circle" },
-                { value = "icon", label = "Icon only" },
+                { value = "circle", label = "Icon + circle" },
+                { value = "icon", label = "Icon" },
                 { value = "ignore", label = "Ignore" },
             }
         end,
@@ -211,8 +222,8 @@ function Options:CreateUnitsPage(parent)
             end
         end,
         false)
-    AddControlTooltip(self.healerPinStyleDropdown, "Healer icon style",
-        "Icon inside circle keeps the normal team pin beneath the healer glyph. Icon only shows only the healer glyph. Ignore renders healers as ordinary teammates.")
+    AddControlTooltip(self.healerPinStyleDropdown, "Healers",
+        "Icon + circle keeps the normal team pin beneath the healer glyph. Icon shows only the healer glyph. Ignore renders healers as ordinary teammates.")
 
     self.healerIconCustomColorControl = MakeColorSwatchControl(
         team,

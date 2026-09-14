@@ -14,7 +14,7 @@ local BORDER_STYLE_OPTIONS = Options.Constants.BORDER_STYLE_OPTIONS
 
 function Options:CreateGeneralPage(parent)
     local db = BattleMaps.Database:Get()
-    local appearanceHeight = 334
+    local appearanceHeight = 310
     local page = CreateFrame("Frame", nil, parent)
     self.pages.general = page
     page:SetAllPoints(parent)
@@ -152,14 +152,7 @@ function Options:CreateGeneralPage(parent)
     AddControlTooltip(self.factionSwapAlertCheck, "Faction swap alert",
         "Colours the map border only when the battleground assigns you to the opposite faction.")
 
-    MakeCheckbox(appearance, "Fade map header when mouse leaves", 10, -56,
-        function() return db.fadeMapHeader end,
-        function(value)
-            db.fadeMapHeader = value
-            BattleMaps.MapFrame:UpdateChromeFade(0, true)
-        end)
-
-    self.borderStyleDropdown = MakeDropdown(appearance, "Border style", 12, -84, 250, BORDER_STYLE_OPTIONS,
+    self.borderStyleDropdown = MakeDropdown(appearance, "Border style", 12, -58, 250, BORDER_STYLE_OPTIONS,
         function() return db.frameBorderStyle or "solid" end,
         function(value)
             db.frameBorderStyle = value == "tooltip" and "tooltip"
@@ -169,7 +162,7 @@ function Options:CreateGeneralPage(parent)
         end,
         true)
 
-    MakeSlider(appearance, "Border thickness", 12, -132, 0, 8, 1,
+    MakeSlider(appearance, "Border thickness", 12, -106, 0, 8, 1,
         function() return tonumber(db.frameBorderSize) or 2 end,
         function(value)
             db.frameBorderSize = value
@@ -177,7 +170,7 @@ function Options:CreateGeneralPage(parent)
         end,
         function(value) return value == 0 and "Off" or string.format("%d px", value) end)
 
-    MakeSlider(appearance, "Border strength", 12, -180, 0.15, 1.00, 0.05,
+    MakeSlider(appearance, "Border strength", 12, -154, 0.15, 1.00, 0.05,
         function() return tonumber(db.frameBorderStrength) or 1 end,
         function(value)
             db.frameBorderStrength = value
@@ -189,7 +182,7 @@ function Options:CreateGeneralPage(parent)
         appearance,
         "Map texture opacity",
         12,
-        -228,
+        -202,
         0.20,
         1.00,
         0.05,
@@ -205,7 +198,7 @@ function Options:CreateGeneralPage(parent)
         appearance,
         "Frame background",
         12,
-        -276,
+        -250,
         function()
             local color = db.frameBackgroundColor
             return type(color) == "table" and color

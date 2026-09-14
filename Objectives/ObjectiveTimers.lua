@@ -205,13 +205,18 @@ local function GetTimerSettings(mapID)
     return BattleMaps.Database and BattleMaps.Database:Get() or nil
 end
 
-local function GetObjectiveTimerTextColor(settings)
-    if settings and settings.objectiveTimerTextColorMode == "class"
-        and Pins.GetPlayerClassColor then
-        return Pins:GetPlayerClassColor()
+local function GetObjectiveTimerTextColor(settings, remaining)
+    if not settings or settings.objectiveTimerTextColorMode ~= "custom" then
+        remaining = tonumber(remaining) or 999
+        if remaining <= 5 then
+            return 1.00, 0.18, 0.12
+        elseif remaining <= 10 then
+            return 1.00, 0.82, 0.12
+        end
+        return 1.00, 1.00, 1.00
     end
 
-    local color = type(settings and settings.objectiveTimerTextColor) == "table"
+    local color = type(settings.objectiveTimerTextColor) == "table"
         and settings.objectiveTimerTextColor or {}
     return BattleMaps.Clamp(tonumber(color.r or color[1]) or 1, 0, 1),
         BattleMaps.Clamp(tonumber(color.g or color[2]) or 1, 0, 1),
@@ -940,7 +945,7 @@ function Pins:UpdateObjectiveCaptureTimerSpecialLayers(pin, record, now)
     end
 end
 
-function Pins:ApplyObjectiveCaptureTimerTextStyle(pin)
+function Pins:ApplyObjectiveCaptureTimerTextStyle(pin, remaining)
     if not pin then return false end
     self:EnsureObjectiveCaptureTimerTextures(pin)
     local timerText = pin.objectiveCaptureTimerText
@@ -974,7 +979,7 @@ function Pins:ApplyObjectiveCaptureTimerTextStyle(pin)
     local scaledOffsetX = math.floor((offsetX * textureScale) + (offsetX >= 0 and 0.5 or -0.5))
     local scaledOffsetY = math.floor((offsetY * textureScale) + (offsetY >= 0 and 0.5 or -0.5))
 
-    local r, g, b = GetObjectiveTimerTextColor(db)
+    local r, g, b = GetObjectiveTimerTextColor(db, remaining)
     local textAlpha = BattleMaps.Clamp(tonumber(db.objectiveTimerTextAlpha) or 1.00, 0, 1)
     local styleKey = table.concat({
         fontKey,
@@ -1041,7 +1046,7 @@ function Pins:UpdateObjectiveCaptureTimerText(pin, record, now)
         return
     end
 
-    if not self:ApplyObjectiveCaptureTimerTextStyle(pin) then
+    if not self:ApplyObjectiveCaptureTimerTextStyle(pin, remaining) then
         timerText:Hide()
         return
     end
@@ -1981,7 +1986,7 @@ local function FormatSeethingAzeriteSeconds(secondsLeft)
     return tostring(seconds)
 end
 
-local function ApplySeethingAzeriteTextStyle(pin, mapID)
+local function ApplySeethingAzeriteTextStyle(pin, mapID, remaining)
     local text = pin and pin.BattleMapsSeethingAzeriteTimerText
     if not text then return false end
     local settings = GetTimerSettings(mapID)
@@ -2010,7 +2015,7 @@ local function ApplySeethingAzeriteTextStyle(pin, mapID)
     local offsetY = BattleMaps.Clamp(tonumber(settings.objectiveTimerTextOffsetY) or 0, -32, 32)
     local scaledOffsetX = math.floor((offsetX * textureScale) + (offsetX >= 0 and 0.5 or -0.5))
     local scaledOffsetY = math.floor((offsetY * textureScale) + (offsetY >= 0 and 0.5 or -0.5))
-    local r, g, b = GetObjectiveTimerTextColor(settings)
+    local r, g, b = GetObjectiveTimerTextColor(settings, remaining)
     local alpha = BattleMaps.Clamp(tonumber(settings.objectiveTimerTextAlpha) or 1, 0, 1)
     local styleKey = table.concat({
         fontKey, fontPath, tostring(fontSize),
@@ -2147,7 +2152,7 @@ function Pins:UpdateSeethingShoreAzeriteTimer(pin, record, activeTexturePath, sp
     )
     if settings and settings.showObjectiveTimerText ~= false
         and remaining > 0 and remaining <= threshold
-        and ApplySeethingAzeriteTextStyle(pin, mapID) then
+        and ApplySeethingAzeriteTextStyle(pin, mapID, remaining) then
         local display = FormatSeethingAzeriteSeconds(remaining)
         text:SetText(display)
         text:Show()

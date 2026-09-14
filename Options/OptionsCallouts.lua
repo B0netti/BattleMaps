@@ -7,6 +7,7 @@ local W = Options.Widgets
 local MakeCheckbox = W.MakeCheckbox
 local MakePanel = W.MakePanel
 local MakeSlider = W.MakeSlider
+local MakeDropdown = W.MakeDropdown
 local MakeResetIconButton = W.MakeResetIconButton
 local SetControlEnabled = W.SetControlEnabled
 local AddControlTooltip = W.AddControlTooltip
@@ -65,26 +66,27 @@ local function MakeMessageEditor(parent, actionKey, x, y)
 
     local editBox = CreateFrame("EditBox", nil, cell, "InputBoxTemplate")
     editBox:SetPoint("TOPLEFT", label, "BOTTOMLEFT", 0, -6)
-    editBox:SetPoint("RIGHT", cell, "RIGHT", -120, 0)
+    editBox:SetPoint("RIGHT", cell, "RIGHT", -124, 0)
     editBox:SetHeight(24)
     editBox:SetAutoFocus(false)
     editBox:SetMaxLetters(120)
     editBox:SetJustifyH("LEFT")
     cell.editBox = editBox
 
-    local bindingLabel = cell:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall")
-    bindingLabel:SetPoint("LEFT", editBox, "RIGHT", 8, 0)
-    bindingLabel:SetPoint("RIGHT", cell, "RIGHT", -8, 0)
-    bindingLabel:SetJustifyH("LEFT")
-    bindingLabel:SetTextColor(0.72, 0.92, 1.00, 1)
-    cell.bindingLabel = bindingLabel
+    local bindingDropdown = MakeDropdown(cell, "", 208, -22, 104,
+        function() return Callouts:GetBindingChoices() end,
+        function() return Callouts:GetActionBinding(actionKey) end,
+        function(value) Callouts:SetActionBinding(actionKey, value) end)
+    cell.bindingDropdown = bindingDropdown
+    AddControlTooltip(bindingDropdown, "Callout click binding",
+        "Choose the modifier + left-click combination for this callout. Assigning a combination already used by another callout swaps the two bindings.")
 
     local function Refresh()
         editBox.refreshing = true
         editBox:SetText(Callouts:GetMessageTemplate(actionKey))
         editBox.refreshing = false
         icon:SetTexture(Callouts:GetActionTexture(actionKey))
-        bindingLabel:SetText(Callouts:GetActionBindingLabel(actionKey))
+        if bindingDropdown.Refresh then bindingDropdown:Refresh() end
     end
 
     local function Commit()
@@ -109,7 +111,7 @@ local function MakeMessageEditor(parent, actionKey, x, y)
         icon:SetAlpha(enabled and 1 or 0.40)
         label:SetTextColor(enabled and 1.00 or 0.45, enabled and 0.82 or 0.45, enabled and 0.40 or 0.45, 1)
         editBox:SetTextColor(enabled and 1 or 0.45, enabled and 1 or 0.45, enabled and 1 or 0.45)
-        bindingLabel:SetTextColor(enabled and 0.72 or 0.45, enabled and 0.92 or 0.45, enabled and 1.00 or 0.45, 1)
+        SetControlEnabled(bindingDropdown, enabled)
     end
 
     Options.refreshers[#Options.refreshers + 1] = cell
@@ -163,14 +165,14 @@ function Options:CreateCalloutsPage(parent)
         function(value) return string.format("%d", math.floor(value + (value >= 0 and 0.5 or -0.5))) end,
         164)
 
-    local messagesPanel = MakePanel(page, "Callout messages", 0, -140, 684, 202)
+    local messagesPanel = MakePanel(page, "Callout messages", 0, -140, 684, 282)
 
     local help = MakeTokenHelpButton(messagesPanel)
     help:SetPoint("TOPRIGHT", messagesPanel, "TOPRIGHT", -42, -6)
     self.calloutTokenHelp = help
 
     local resetMessages = MakeResetIconButton(messagesPanel, "Reset callout messages",
-        "Restores the four callout message templates to their defaults.", function()
+        "Restores all six callout message templates to their defaults.", function()
             Callouts:ResetMessages()
             self:Refresh()
         end)
@@ -181,6 +183,8 @@ function Options:CreateCalloutsPage(parent)
         MakeMessageEditor(messagesPanel, "attack", 348, -38),
         MakeMessageEditor(messagesPanel, "defend", 12, -116),
         MakeMessageEditor(messagesPanel, "clear", 348, -116),
+        MakeMessageEditor(messagesPanel, "custom1", 12, -194),
+        MakeMessageEditor(messagesPanel, "custom2", 348, -194),
     }
 
     local stateRefresher = CreateFrame("Frame", nil, page)
@@ -197,5 +201,5 @@ function Options:CreateCalloutsPage(parent)
 end
 
 if Options.RegisterPage then
-    Options:RegisterPage("callouts", "Callouts", 560, "CreateCalloutsPage", 40)
+    Options:RegisterPage("callouts", "Callouts", 640, "CreateCalloutsPage", 40)
 end

@@ -13,6 +13,7 @@ local MakeChoiceSelector = W.MakeChoiceSelector
 local MakeRangeSlider = W.MakeRangeSlider
 local MakeCompactNumberInput = W.MakeCompactNumberInput
 local MakeColorSwatchControl = W.MakeColorSwatchControl
+local SetControlEnabled = W.SetControlEnabled
 
 function Options:CreateBasesPage(parent)
     local db = BattleMaps.Database:Get()
@@ -230,7 +231,7 @@ function Options:CreateBasesPage(parent)
     -- left = enable/position controls, centre = primary text timing/size/font,
     -- right = colour/alpha controls. Keep the centre column wider so the font
     -- dropdown and threshold slider have enough room.
-    local timerText = MakePanel(page, "Countdown text", 0, -358, 684, 184)
+    local timerText = MakePanel(page, "Countdown text", 0, -358, 684, 214)
     local textLeftX = captureLeftX
     local textCenterX = captureCenterX
     local textRightX = captureRightX
@@ -278,18 +279,21 @@ function Options:CreateBasesPage(parent)
         function(value) return string.format("%d px", value) end,
         textCenterWidth)
 
+    self.objectiveTimerTextCustomColorCheck = MakeCheckbox(timerText, "Custom color", textRightX, -64,
+        function() return TimerSettings().objectiveTimerTextColorMode == "custom" end,
+        function(value)
+            TimerSettings().objectiveTimerTextColorMode = value == true and "custom" or "dynamic"
+            self:Refresh()
+            RefreshTimerText()
+        end)
+
     self.objectiveTimerTextColorControl = MakeColorSwatchControl(
         timerText,
-        "Text color",
+        "Color",
         textRightX,
-        -78,
+        -94,
         function()
             local settings = TimerSettings()
-            if settings.objectiveTimerTextColorMode == "class"
-                and BattleMaps.Pins and BattleMaps.Pins.GetPlayerClassColor then
-                local r, g, b = BattleMaps.Pins:GetPlayerClassColor()
-                return { r = r, g = g, b = b }
-            end
             return settings.objectiveTimerTextColor
                 or { r = 1, g = 0.8352941870689392, b = 0.3333333432674408 }
         end,
@@ -322,7 +326,7 @@ function Options:CreateBasesPage(parent)
         end,
         true)
 
-    self.objectiveTimerTextAlphaSlider = MakeSlider(timerText, "Text alpha", textRightX, -134, 0.00, 1.00, 0.05,
+    self.objectiveTimerTextAlphaSlider = MakeSlider(timerText, "Text alpha", textRightX, -158, 0.00, 1.00, 0.05,
         function() return tonumber(TimerSettings().objectiveTimerTextAlpha) or 1.00 end,
         function(value)
             TimerSettings().objectiveTimerTextAlpha = value
@@ -367,8 +371,17 @@ function Options:CreateBasesPage(parent)
         "Moves the countdown up or down relative to the base texture. The offset scales with the texture.")
     AddControlTooltip(self.objectiveTimerTextSizeSlider, "Text size",
         "Sets the base countdown size. It scales with the rendered base texture and map zoom.")
-    AddControlTooltip(self.objectiveTimerTextColorControl, "Text color",
-        "Click the color swatch to choose the countdown text color. Class follows the currently logged-in character.")
+    AddControlTooltip(self.objectiveTimerTextCustomColorCheck, "Custom color",
+        "Off uses the adaptive countdown colours: white normally, yellow at 10 seconds, and red at 5 seconds. Turn this on to use one fixed custom colour instead.")
+    AddControlTooltip(self.objectiveTimerTextColorControl, "Color",
+        "Choose the fixed countdown colour used while Custom color is enabled.")
+
+    local textColorState = CreateFrame("Frame", nil, timerText)
+    textColorState.Refresh = function()
+        SetControlEnabled(self.objectiveTimerTextColorControl,
+            TimerSettings().objectiveTimerTextColorMode == "custom")
+    end
+    self.refreshers[#self.refreshers + 1] = textColorState
 end
 
 if Options.RegisterPage then

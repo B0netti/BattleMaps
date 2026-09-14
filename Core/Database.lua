@@ -15,6 +15,7 @@ local PIN_DEFAULTS = {
 }
 
 local PLAYER_PIN_DEFAULTS = {
+    showTeamPinNames = true,
     playerArrowSize = PIN_DEFAULTS.playerArrowSize,
     playerPinStyle = "arrow",
     playerFovStyle = "coldRays",
@@ -75,7 +76,7 @@ local TIMER_DEFAULTS = {
     objectiveTimerTextOffsetX = 0,
     objectiveTimerTextOffsetY = 0,
     objectiveTimerTextFont = "Expressway",
-    objectiveTimerTextColorMode = "custom",
+    objectiveTimerTextColorMode = "dynamic",
     objectiveTimerTextColor = {
         r = 1.00,
         g = 1.00,
@@ -186,6 +187,7 @@ local ROOT_DEFAULTS = {
     useGlobalTimerSettings = false,
     useGlobalNotificationSettings = true,
     playerArrowSize = PIN_DEFAULTS.playerArrowSize,
+    showTeamPinNames = PLAYER_PIN_DEFAULTS.showTeamPinNames,
     playerPinStyle = PLAYER_PIN_DEFAULTS.playerPinStyle,
     playerFovStyle = PLAYER_PIN_DEFAULTS.playerFovStyle,
     playerFovScale = PLAYER_PIN_DEFAULTS.playerFovScale,
@@ -310,7 +312,7 @@ local PERSONAL_MAP_DEFAULTS = {
             objectiveTimerTextOffsetX = 0,
             objectiveTimerTextOffsetY = 0,
             objectiveTimerTextFont = "Accidental Presidency",
-            objectiveTimerTextColorMode = "custom",
+            objectiveTimerTextColorMode = "dynamic",
             objectiveTimerTextColor = {
                 b = 0.9725490808486938,
                 g = 1,
@@ -388,7 +390,7 @@ local PERSONAL_MAP_DEFAULTS = {
             objectiveTimerTextOffsetX = 0,
             objectiveTimerTextOffsetY = 0,
             objectiveTimerTextFont = "friz",
-            objectiveTimerTextColorMode = "custom",
+            objectiveTimerTextColorMode = "dynamic",
             objectiveTimerTextColor = {
                 b = 1,
                 g = 1,
@@ -466,7 +468,7 @@ local PERSONAL_MAP_DEFAULTS = {
             objectiveTimerTextOffsetX = 0,
             objectiveTimerTextOffsetY = 0,
             objectiveTimerTextFont = "Expressway",
-            objectiveTimerTextColorMode = "custom",
+            objectiveTimerTextColorMode = "dynamic",
             objectiveTimerTextColor = {
                 b = 0,
                 g = 0.8196079134941101,
@@ -544,7 +546,7 @@ local PERSONAL_MAP_DEFAULTS = {
             objectiveTimerTextOffsetX = 1,
             objectiveTimerTextOffsetY = -3,
             objectiveTimerTextFont = "Expressway",
-            objectiveTimerTextColorMode = "custom",
+            objectiveTimerTextColorMode = "dynamic",
             objectiveTimerTextColor = {
                 r = 0.8784314393997192,
                 g = 0.8235294818878174,
@@ -622,7 +624,7 @@ local PERSONAL_MAP_DEFAULTS = {
             objectiveTimerTextOffsetX = 0,
             objectiveTimerTextOffsetY = 0,
             objectiveTimerTextFont = "friz",
-            objectiveTimerTextColorMode = "custom",
+            objectiveTimerTextColorMode = "dynamic",
             objectiveTimerTextColor = {
                 b = 1,
                 g = 1,
@@ -700,7 +702,7 @@ local PERSONAL_MAP_DEFAULTS = {
             objectiveTimerTextOffsetX = 0,
             objectiveTimerTextOffsetY = 0,
             objectiveTimerTextFont = "friz",
-            objectiveTimerTextColorMode = "custom",
+            objectiveTimerTextColorMode = "dynamic",
             objectiveTimerTextColor = {
                 b = 1,
                 g = 1,
@@ -778,7 +780,7 @@ local PERSONAL_MAP_DEFAULTS = {
             objectiveTimerTextOffsetX = 0,
             objectiveTimerTextOffsetY = 0,
             objectiveTimerTextFont = "Expressway",
-            objectiveTimerTextColorMode = "custom",
+            objectiveTimerTextColorMode = "dynamic",
             objectiveTimerTextColor = {
                 b = 1,
                 g = 1,
@@ -856,7 +858,7 @@ local PERSONAL_MAP_DEFAULTS = {
             objectiveTimerTextOffsetX = 0,
             objectiveTimerTextOffsetY = 0,
             objectiveTimerTextFont = "friz",
-            objectiveTimerTextColorMode = "custom",
+            objectiveTimerTextColorMode = "dynamic",
             objectiveTimerTextColor = {
                 b = 1,
                 g = 1,
@@ -877,7 +879,7 @@ local PERSONAL_MAP_DEFAULTS = {
         useGlobalObjectiveSettings = false,
         playerPins = {
             playerArrowSize = 128,
-            playerPinStyle = "compass",
+            playerPinStyle = "arrowCircle",
             playerFovStyle = "sunbeam",
             playerFovScale = 3,
             playerFovAlpha = 1,
@@ -934,7 +936,7 @@ local PERSONAL_MAP_DEFAULTS = {
             objectiveTimerTextOffsetX = 0,
             objectiveTimerTextOffsetY = 0,
             objectiveTimerTextFont = "Expressway",
-            objectiveTimerTextColorMode = "custom",
+            objectiveTimerTextColorMode = "dynamic",
             objectiveTimerTextColor = {
                 r = 1,
                 g = 0.8431373238563538,
@@ -1012,7 +1014,7 @@ local PERSONAL_MAP_DEFAULTS = {
             objectiveTimerTextOffsetX = 0,
             objectiveTimerTextOffsetY = 0,
             objectiveTimerTextFont = "friz",
-            objectiveTimerTextColorMode = "custom",
+            objectiveTimerTextColorMode = "dynamic",
             objectiveTimerTextColor = {
                 b = 1,
                 g = 1,
@@ -1478,17 +1480,20 @@ function Database:Initialize()
         BattleMapsDB.playerPinStyle = previousCustomPlayerArrow == false
             and "default" or "arrow"
     end
+    if BattleMapsDB.playerPinStyle == "compass" then
+        BattleMapsDB.playerPinStyle = "arrowCircle"
+    end
     BattleMapsDB.playerPinStyle = ({
         default = true,
         arrow = true,
-        compass = true,
+        arrowCircle = true,
         team = true,
     })[BattleMapsDB.playerPinStyle] and BattleMapsDB.playerPinStyle or "arrow"
     BattleMapsDB.playerPinStyleVersion = 1
     BattleMapsDB.useCustomPlayerArrow = nil
     NormalizePlayerFovSettings(BattleMapsDB)
 
-    BattleMapsDB.fadeMapHeader = BattleMapsDB.fadeMapHeader ~= false
+    BattleMapsDB.fadeMapHeader = true -- header hover/fade is now the fixed standard behaviour
     BattleMapsDB.mapTextureAlpha = BattleMaps.Clamp(tonumber(BattleMapsDB.mapTextureAlpha) or 1, 0.20, 1.00)
     BattleMapsDB.fovBoundaryPreview = BattleMapsDB.fovBoundaryPreview == true
     BattleMapsDB.fovBoundaryMask = BattleMapsDB.fovBoundaryMask == true
@@ -1596,8 +1601,8 @@ function Database:Initialize()
     timerTextColor.g = BattleMaps.Clamp(tonumber(timerTextColor.g or timerTextColor[2]) or 1, 0, 1)
     timerTextColor.b = BattleMaps.Clamp(tonumber(timerTextColor.b or timerTextColor[3]) or 1, 0, 1)
     BattleMapsDB.objectiveTimerTextColor = timerTextColor
-    BattleMapsDB.objectiveTimerTextColorMode = BattleMapsDB.objectiveTimerTextColorMode == "class"
-        and "class" or "custom"
+    BattleMapsDB.objectiveTimerTextColorMode = BattleMapsDB.objectiveTimerTextColorMode == "custom"
+        and "custom" or "dynamic"
     BattleMapsDB.objectiveCaptureFillDirection = BattleMapsDB.objectiveCaptureFillDirection == "vertical"
         and "vertical" or "horizontal"
     BattleMapsDB.objectiveAssaultPulseCount = BattleMaps.Clamp(
@@ -1615,6 +1620,7 @@ function Database:Initialize()
     -- Keep the previous public key coherent for downgrade compatibility, but
     -- never let it override the canonical value on startup.
     BattleMapsDB.movePlayerAurasToMinimapArea = BattleMapsDB.bgLayoutMovePlayerAuras
+    BattleMapsDB.showTeamPinNames = BattleMapsDB.showTeamPinNames ~= false
     BattleMapsDB.stackTeamPins = BattleMapsDB.stackTeamPins ~= false
     BattleMapsDB.excludePlayerArrowFromStack = BattleMapsDB.excludePlayerArrowFromStack == true
     BattleMapsDB.fanOutTeamPinsOnHover = BattleMapsDB.fanOutTeamPinsOnHover ~= false
@@ -1728,6 +1734,7 @@ function Database:Initialize()
         )
         config.playerPins.healerPinStyle = ({ circle = true, icon = true, ignore = true })[config.playerPins.healerPinStyle]
             and config.playerPins.healerPinStyle or PLAYER_PIN_DEFAULTS.healerPinStyle
+        config.playerPins.showTeamPinNames = config.playerPins.showTeamPinNames ~= false
         config.playerPins.stackTeamPins = config.playerPins.stackTeamPins ~= false
         config.playerPins.fanOutTeamPinsOnHover = config.playerPins.fanOutTeamPinsOnHover ~= false
         config.playerPins.excludePlayerArrowFromStack = config.playerPins.excludePlayerArrowFromStack == true
@@ -1736,10 +1743,13 @@ function Database:Initialize()
             config.playerPins.playerPinStyle = previousCustomPlayerArrow == false
                 and "default" or "arrow"
         end
+        if config.playerPins.playerPinStyle == "compass" then
+            config.playerPins.playerPinStyle = "arrowCircle"
+        end
         config.playerPins.playerPinStyle = ({
             default = true,
             arrow = true,
-            compass = true,
+            arrowCircle = true,
             team = true,
         })[config.playerPins.playerPinStyle] and config.playerPins.playerPinStyle or "arrow"
         local healerColor = type(config.playerPins.healerIconCustomColor) == "table"
@@ -1750,8 +1760,8 @@ function Database:Initialize()
         config.playerPins.healerIconCustomColor = healerColor
         config.playerPins.healerIconColorMode = config.playerPins.healerIconColorMode == "class"
             and "class" or "custom"
-        config.timers.objectiveTimerTextColorMode = config.timers.objectiveTimerTextColorMode == "class"
-            and "class" or "custom"
+        config.timers.objectiveTimerTextColorMode = config.timers.objectiveTimerTextColorMode == "custom"
+            and "custom" or "dynamic"
         config.playerPins.playerRadiusSize = nil
         config.playerPins.teamPinStackRadius = BattleMaps.Clamp(
             math.floor((tonumber(config.playerPins.teamPinStackRadius) or BattleMapsDB.teamPinStackRadius or 18) + 0.5), 8, 40)
@@ -2043,6 +2053,7 @@ function Database:ResetPlayerPins(mapID)
     if not target then return end
     local source = GetCategoryResetSource(mapID, PLAYER_PIN_DEFAULTS, "playerPins", useGlobal)
     ResetDefaults(source, target)
+    target.showTeamPinNames = source.showTeamPinNames ~= false
     target.teamPinBorderScale = BattleMaps.Clamp(
         tonumber(source.teamPinBorderScale) or PLAYER_PIN_DEFAULTS.teamPinBorderScale,
         0.50,

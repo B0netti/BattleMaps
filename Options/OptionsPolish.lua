@@ -236,7 +236,7 @@ end
 -- fit the user's UIParent. This keeps controls inside the frame instead of
 -- letting them draw below its bottom border.
 local PAGE_HEIGHTS = {
-    callouts = 560,
+    callouts = 640,
     flags = 720,
     notifications = 720,
 }
