@@ -16,6 +16,7 @@ local CUSTOM_HEALER_FILL_WHITE_TEXTURE = "Interface\\AddOns\\BattleMaps\\Media\\
 local CUSTOM_HEALER_CROSS_TEXTURE = "Interface\\AddOns\\BattleMaps\\Media\\healer_cross.tga"
 local CUSTOM_HEALER_CROSS_BORDER_TEXTURE = "Interface\\AddOns\\BattleMaps\\Media\\healer_cross_border.tga"
 local CUSTOM_HEALER_COMBAT_CROSS_TEXTURE = "Interface\\AddOns\\BattleMaps\\Media\\healer_cross_combat.tga"
+local FRIENDLY_TARGET_HIGHLIGHT_TEXTURE = "Interface\\AddOns\\BattleMaps\\Media\\friendly_target_ring.tga"
 
 -- Previous single-layer media remain as graceful fallbacks while users replace
 -- files or when one of the new layered assets is absent.
@@ -264,6 +265,7 @@ local TEAM_BORDER_SUBLEVEL = 7
 local GROUP_PIN_SUBLEVEL = 8
 local HEALER_OVERLAY_SUBLEVEL = 9
 local TEAM_SPEC_ICON_SUBLEVEL = 10
+local FRIENDLY_TARGET_HIGHLIGHT_SUBLEVEL = 11
 
 -- Global frame ordering keeps all black backplates below all class-coloured
 -- fills. Normally the player arrow sits above the complete teammate stack. When
@@ -287,6 +289,9 @@ local PLAYER_CIRCLE_FILL_FRAME_LEVEL_OFFSET = 70
 local PLAYER_CIRCLE_BORDER_FRAME_LEVEL_OFFSET = 71
 local PLAYER_TEAM_BORDER_FRAME_LEVEL_OFFSET = TEAM_STACK_BORDER_FRAME_LEVEL_OFFSET
 local TEAM_DEATH_MARKER_FRAME_LEVEL_OFFSET = 72
+local FRIENDLY_TARGET_HIGHLIGHT_FRAME_LEVEL_OFFSET = 73
+local FRIENDLY_TARGET_HIGHLIGHT_STEADY_ALPHA = 0.78
+local FRIENDLY_TARGET_HIGHLIGHT_PULSE_DURATION = 0.45
 local MAX_TEAM_STACK_UNIT_FRAMES = 16
 local TEAM_DEATH_MARKER_DURATION = 10.00
 local TEAM_STATE_POLL_INTERVAL = 0.15
@@ -3390,6 +3395,7 @@ function Pins:SuppressLiveUnitFramesForPreview()
     end
 
     self:HideTeamStackUnitFrames()
+    self:HideFriendlyTargetHighlight()
     self:HideLivePlayerFov()
     if self.unitFrame then self:SetNativeGroupPinsVisible(self.unitFrame, true) end
     self:SetLivePlayerUnitFramesEnabled(false)
@@ -4017,6 +4023,246 @@ function Pins:UpdateUnitFrameFull(unitFrame, timeNow)
         self.lastDetectedHealerCount = healerCount
         BattleMaps.Debug("friendly healers detected:", healerCount)
     end
+end
+
+
+-- Friendly target highlight -------------------------------------------------
+
+function Pins:GetFriendlyTargetUnit()
+    if not UnitExists("target") or not UnitIsFriend("player", "target") then
+        return nil
+    end
+
+    if UnitIsUnit("target", "player") then
+        return "player"
+    end
+
+    local unitFrame = self.unitFrame
+    if not unitFrame then return nil end
+    local memberCount, unitBase = GetLiveGroupRosterSource(unitFrame)
+    for index = 1, memberCount do
+        local unit = unitBase .. index
+        if UnitExists(unit) and UnitIsUnit(unit, "target") then
+            return unit
+        end
+    end
+
+    return nil
+end
+
+function Pins:GetFriendlyTargetHighlightSize(unit, pinConfig)
+    pinConfig = pinConfig or {}
+    local scale = BattleMaps.Clamp(
+        tonumber(pinConfig.friendlyTargetHighlightScale) or 1.55,
+        1.20,
+        2.50
+    )
+
+    if unit and UnitIsUnit(unit, "player") then
+        local appearance = self.unitPlayerAppearance
+        local baseSize = appearance and math.max(
+            tonumber(appearance.size) or 0,
+            tonumber(appearance.borderSize) or 0,
+            tonumber(appearance.overlayBorderSize) or 0,
+            tonumber(appearance.overlayFillSize) or 0
+        ) or tonumber(self.unitPlayerSize) or 22
+        return BattleMaps.Clamp(baseSize * scale, 12, 320)
+    end
+
+    local teamSize = tonumber(self.unitTeamSize) or 12
+    local healerSettingSize = tonumber(self.unitHealerSize) or tonumber(pinConfig.healerPinSize) or 16
+    local metrics = self:GetTeamPinMetrics(
+        teamSize,
+        healerSettingSize,
+        teamSize,
+        nil,
+        pinConfig.teamPinBorderScale
+    )
+    -- Target highlighting should identify the teammate slot, not scale with the
+    -- role artwork layered on top of it. In particular, healer glyph size is
+    -- user-configurable and can be substantially larger than the ordinary team
+    -- circle; using it here made targeted healers receive a visibly larger ring
+    -- than every other teammate. Keep one consistent team-pin footprint.
+    local baseSize = math.max(metrics.borderSize or teamSize, metrics.fillSize or teamSize)
+
+    return BattleMaps.Clamp(baseSize * scale, 8, 256)
+end
+
+function Pins:GetFriendlyTargetHighlightAlpha(pinConfig)
+    local steady = FRIENDLY_TARGET_HIGHLIGHT_STEADY_ALPHA
+    if not pinConfig or pinConfig.friendlyTargetHighlightPulse == false then
+        return steady
+    end
+
+    local acquiredAt = tonumber(self.friendlyTargetHighlightAcquiredAt)
+    local timeNow = (type(GetTime) == "function" and GetTime()) or 0
+    if not acquiredAt or timeNow <= acquiredAt then return 1 end
+
+    local elapsed = timeNow - acquiredAt
+    if elapsed >= FRIENDLY_TARGET_HIGHLIGHT_PULSE_DURATION then return steady end
+
+    local progress = BattleMaps.Clamp(elapsed / FRIENDLY_TARGET_HIGHLIGHT_PULSE_DURATION, 0, 1)
+    -- One restrained acquisition pulse: start bright, dip, rebound slightly,
+    -- then settle to the normal map-reading alpha without continuous flashing.
+    local wave = (0.5 + (0.5 * math.cos(progress * math.pi * 2))) * (1 - progress)
+    return BattleMaps.Clamp(steady + ((1 - steady) * wave), steady, 1)
+end
+
+function Pins:LayoutFriendlyTargetHighlightFrame(unit)
+    local frame = self.friendlyTargetHighlightFrame
+    local mapFrame = BattleMaps.MapFrame
+    local canvas = mapFrame and mapFrame.canvas
+    if not frame or not canvas then return false end
+
+    local width, height = canvas:GetSize()
+    if not width or width <= 0 or not height or height <= 0 then
+        frame:SetAlpha(0)
+        return false
+    end
+
+    local offsetX, offsetY = 0, 0
+    if unit and not UnitIsUnit(unit, "player") and self.teamStackLiveActive then
+        local slot = GetUnitStackSlot(unit)
+        local stackFrame = slot and self.teamStackUnitFrames and self.teamStackUnitFrames[slot]
+        if stackFrame then
+            offsetX = (tonumber(stackFrame.BattleMapsBaseOffsetX) or 0)
+                + (tonumber(stackFrame.BattleMapsFanOffsetX) or 0)
+            offsetY = (tonumber(stackFrame.BattleMapsBaseOffsetY) or 0)
+                + (tonumber(stackFrame.BattleMapsFanOffsetY) or 0)
+        end
+    end
+
+    if frame.BattleMapsAnchorOffsetX ~= offsetX
+        or frame.BattleMapsAnchorOffsetY ~= offsetY
+        or frame.BattleMapsCanvasWidth ~= width
+        or frame.BattleMapsCanvasHeight ~= height then
+        frame:ClearAllPoints()
+        frame:SetPoint("TOPLEFT", canvas, "TOPLEFT", offsetX, offsetY)
+        frame:SetSize(width, height)
+        frame.BattleMapsAnchorOffsetX = offsetX
+        frame.BattleMapsAnchorOffsetY = offsetY
+        frame.BattleMapsCanvasWidth = width
+        frame.BattleMapsCanvasHeight = height
+    end
+    frame:SetFrameLevel(self.parent:GetFrameLevel() + FRIENDLY_TARGET_HIGHLIGHT_FRAME_LEVEL_OFFSET)
+    return true
+end
+
+function Pins:UpdateFriendlyTargetHighlightFramePeriodic(frame, timeNow)
+    local unit = self.friendlyTargetHighlightUnit
+    if not unit or not UnitExists(unit) then return end
+
+    local pinConfig = BattleMaps.Database:GetUnitsConfig(
+        self.unitConfigMapID or (BattleMaps.MapFrame and BattleMaps.MapFrame.currentMapID)
+    )
+    frame:SetUnitColor(unit, 1, 1, 1, self:GetFriendlyTargetHighlightAlpha(pinConfig))
+    self:NormalizeUnitFrameCustomTextures(frame)
+end
+
+function Pins:UpdateFriendlyTargetHighlightFrameFull(frame, timeNow)
+    frame:ClearUnits()
+
+    local unit = self.friendlyTargetHighlightUnit
+    local pinConfig = BattleMaps.Database:GetUnitsConfig(
+        self.unitConfigMapID or (BattleMaps.MapFrame and BattleMaps.MapFrame.currentMapID)
+    )
+    if not unit or not UnitExists(unit) or not pinConfig or pinConfig.highlightFriendlyTarget == false then
+        frame:FinalizeUnits()
+        frame.needsFullUpdate = false
+        return
+    end
+
+    local size = self:GetFriendlyTargetHighlightSize(unit, pinConfig)
+    frame:AddUnit(
+        unit,
+        FRIENDLY_TARGET_HIGHLIGHT_TEXTURE,
+        size,
+        size,
+        1, 1, 1, self:GetFriendlyTargetHighlightAlpha(pinConfig),
+        FRIENDLY_TARGET_HIGHLIGHT_SUBLEVEL,
+        false
+    )
+    frame:FinalizeUnits()
+    self:NormalizeUnitFrameCustomTextures(frame)
+    frame.needsFullUpdate = false
+end
+
+function Pins:HideFriendlyTargetHighlight()
+    local frame = self.friendlyTargetHighlightFrame
+    if not frame then
+        self.friendlyTargetHighlightUnit = nil
+        self.friendlyTargetHighlightAcquiredAt = nil
+        return
+    end
+
+    local hadTarget = self.friendlyTargetHighlightUnit ~= nil
+    self.friendlyTargetHighlightUnit = nil
+    self.friendlyTargetHighlightAcquiredAt = nil
+    if not hadTarget and frame:GetAlpha() == 0 then return end
+
+    frame:SetAlpha(0)
+    frame:SetNeedsFullUpdate()
+    frame:UpdatePlayerPins()
+end
+
+function Pins:RefreshFriendlyTargetHighlight(forceFullUpdate)
+    local frame = self.friendlyTargetHighlightFrame
+    if not frame then return end
+
+    local mapFrame = BattleMaps.MapFrame
+    local mapID = mapFrame and mapFrame.currentMapID
+    local pinConfig = mapID and BattleMaps.Database:GetUnitsConfig(mapID) or nil
+    local inLiveBattleground = BattleMaps.IsInLiveBattleground
+        and BattleMaps.IsInLiveBattleground() == true
+    if not inLiveBattleground
+        or (self.ShouldShowDummyPins and self:ShouldShowDummyPins())
+        or not mapID
+        or not self.unitMapID
+        or not pinConfig
+        or pinConfig.highlightFriendlyTarget == false then
+        self:HideFriendlyTargetHighlight()
+        return
+    end
+
+    local newUnit = self:GetFriendlyTargetUnit()
+    local oldUnit = self.friendlyTargetHighlightUnit
+    local sameUnit = oldUnit == nil and newUnit == nil
+    if not sameUnit and oldUnit and newUnit and UnitExists(oldUnit) and UnitExists(newUnit) then
+        sameUnit = UnitIsUnit(oldUnit, newUnit) == true
+    end
+
+    if not sameUnit then
+        self.friendlyTargetHighlightUnit = newUnit
+        self.friendlyTargetHighlightAcquiredAt = newUnit
+            and ((type(GetTime) == "function" and GetTime()) or 0)
+            or nil
+        forceFullUpdate = true
+    elseif newUnit then
+        -- Keep the canonical current roster token. This survives party/raid
+        -- token reshuffles without relying on GUID reads in active PvP.
+        self.friendlyTargetHighlightUnit = newUnit
+    end
+
+    if not newUnit or not self:LayoutFriendlyTargetHighlightFrame(newUnit) then
+        frame:SetAlpha(0)
+        if forceFullUpdate then
+            frame:SetNeedsFullUpdate()
+            frame:UpdatePlayerPins()
+        end
+        return
+    end
+
+    if frame.BattleMapsMapID ~= self.unitMapID then
+        frame.BattleMapsMapID = self.unitMapID
+        frame:SetUiMapID(self.unitMapID)
+        frame:UpdateAppearanceData()
+        forceFullUpdate = true
+    end
+
+    frame:SetAlpha(1)
+    if forceFullUpdate then frame:SetNeedsFullUpdate() end
+    frame:UpdatePlayerPins()
+    self:NormalizeUnitFrameCustomTextures(frame)
 end
 
 
@@ -4704,6 +4950,38 @@ function Pins:InitializeUnitFrames(parent)
     healerOverlayFrame:SetAlpha(0)
     healerOverlayFrame:Show()
 
+    local friendlyTargetHighlightFrame = CreateFrame(
+        "UnitPositionFrame",
+        "BattleMapsFriendlyTargetHighlightFrame",
+        parent,
+        "UnitPositionFrameTemplate"
+    )
+    self.friendlyTargetHighlightFrame = friendlyTargetHighlightFrame
+    friendlyTargetHighlightFrame.BattleMapsPins = self
+    friendlyTargetHighlightFrame.UpdateFull = function(frame, timeNow)
+        frame.BattleMapsPins:UpdateFriendlyTargetHighlightFrameFull(frame, timeNow)
+    end
+    friendlyTargetHighlightFrame.UpdatePeriodic = function(frame, timeNow)
+        frame.BattleMapsPins:UpdateFriendlyTargetHighlightFramePeriodic(frame, timeNow)
+    end
+    friendlyTargetHighlightFrame:SetFrameLevel(parent:GetFrameLevel() + FRIENDLY_TARGET_HIGHLIGHT_FRAME_LEVEL_OFFSET)
+    friendlyTargetHighlightFrame:SetPinSubLevel("player", FRIENDLY_TARGET_HIGHLIGHT_SUBLEVEL)
+    friendlyTargetHighlightFrame:SetPinSubLevel("party", FRIENDLY_TARGET_HIGHLIGHT_SUBLEVEL)
+    friendlyTargetHighlightFrame:SetPinSubLevel("raid", FRIENDLY_TARGET_HIGHLIGHT_SUBLEVEL)
+    friendlyTargetHighlightFrame:SetUseClassColor("player", false)
+    friendlyTargetHighlightFrame:SetUseClassColor("party", false)
+    friendlyTargetHighlightFrame:SetUseClassColor("raid", false)
+    -- The frame is populated explicitly with the one resolved friendly target.
+    -- Keep Blizzard's category auto-population disabled so no unrelated group
+    -- unit can ever inherit the target-ring texture.
+    friendlyTargetHighlightFrame:SetShouldShowUnits("player", false)
+    friendlyTargetHighlightFrame:SetShouldShowUnits("party", false)
+    friendlyTargetHighlightFrame:SetShouldShowUnits("raid", false)
+    friendlyTargetHighlightFrame:SetNeedsPeriodicUpdate(true)
+    friendlyTargetHighlightFrame:SetAlpha(0)
+    ConfigureTeamTooltipHitTesting(friendlyTargetHighlightFrame, false)
+    friendlyTargetHighlightFrame:Show()
+
     self.teamSpecIconFrame = nil
 
     local playerTeamBorderFrame = CreateFrame(
@@ -4904,6 +5182,7 @@ function Pins:RefreshUnits(forceFullUpdate)
     if not unitFrame or not mapID or not unitMapID then
         self:HideTeamStackOverlay()
         self:HideTeamStackUnitFrames()
+        self:HideFriendlyTargetHighlight()
         self:HideLivePlayerFov()
         self:HideMapBoundFov()
         self:HideFovClipDiagnostic()
@@ -4915,6 +5194,7 @@ function Pins:RefreshUnits(forceFullUpdate)
             self.teamHoverFrame,
             self.healerOverlayFrame,
             self.teamSpecIconFrame,
+            self.friendlyTargetHighlightFrame,
             self.playerCircleFillFrame,
             self.playerTeamBorderFrame,
             self.playerFovFrame,
@@ -5021,6 +5301,7 @@ function Pins:RefreshUnits(forceFullUpdate)
             self.teamHoverFrame,
             self.healerOverlayFrame,
             self.teamSpecIconFrame,
+            self.friendlyTargetHighlightFrame,
             self.playerCircleFillFrame,
             self.playerTeamBorderFrame,
             self.playerFovFrame,
@@ -5112,6 +5393,7 @@ function Pins:RefreshUnits(forceFullUpdate)
     ConfigureTeamTooltipHitTesting(self.teamBorderFrame, false)
     ConfigureTeamTooltipHitTesting(self.healerOverlayFrame, false)
     ConfigureTeamTooltipHitTesting(self.teamSpecIconFrame, false)
+    ConfigureTeamTooltipHitTesting(self.friendlyTargetHighlightFrame, false)
     ConfigureTeamTooltipHitTesting(self.playerCircleFillFrame, false)
     ConfigureTeamTooltipHitTesting(self.playerTeamBorderFrame, false)
     ConfigureTeamTooltipHitTesting(self.playerFovFrame, false)
@@ -5129,6 +5411,7 @@ function Pins:RefreshUnits(forceFullUpdate)
             self.teamHoverFrame,
             self.healerOverlayFrame,
             self.teamSpecIconFrame,
+            self.friendlyTargetHighlightFrame,
             self.playerCircleFillFrame,
             self.playerTeamBorderFrame,
             self.playerFovFrame,
@@ -5258,6 +5541,8 @@ function Pins:RefreshUnits(forceFullUpdate)
     -- uses the UnitPositionFrame path above.
     self:HideTeamStackOverlay()
     if useTeamStackUnitFrames then self:UpdateTeamStackUnitFrames() end
+
+    self:RefreshFriendlyTargetHighlight(forceFullUpdate == true)
 
     for _, pingFrame in ipairs(self.unitPingFrames) do
         if pingFrame:IsShown() then pingFrame:UpdatePlayerPins() end

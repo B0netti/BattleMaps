@@ -76,6 +76,7 @@ Events:RegisterEvent("ZONE_CHANGED_NEW_AREA")
 Events:RegisterEvent("PLAYER_MAP_CHANGED")
 Events:RegisterEvent("UPDATE_INSTANCE_INFO")
 Events:RegisterEvent("GROUP_ROSTER_UPDATE")
+Events:RegisterEvent("PLAYER_TARGET_CHANGED")
 Events:RegisterEvent("PLAYER_ROLES_ASSIGNED")
 Events:RegisterEvent("ROLE_CHANGED_INFORM")
 Events:RegisterEvent("PVP_VEHICLE_INFO_UPDATED")
@@ -88,7 +89,6 @@ Events:RegisterEvent("PLAYER_REGEN_ENABLED")
 Events:RegisterEvent("CHAT_MSG_BG_SYSTEM_ALLIANCE")
 Events:RegisterEvent("CHAT_MSG_BG_SYSTEM_HORDE")
 Events:RegisterEvent("CHAT_MSG_BG_SYSTEM_NEUTRAL")
-Events:RegisterEvent("CHAT_MSG_RAID_WARNING")
 Events:RegisterEvent("CHAT_MSG_RAID_BOSS_EMOTE")
 Events:RegisterEvent("RAID_BOSS_EMOTE")
 Events:RegisterEvent("DISPLAY_SIZE_CHANGED")
@@ -98,6 +98,10 @@ Events:SetScript("OnEvent", function(_, event, ...)
     local arg1 = ...
 
     if event == "ADDON_LOADED" then
+        if arg1 == "Blizzard_RaidWarning" then
+            if BattleMaps.Notifications then BattleMaps.Notifications:Apply() end
+            return
+        end
         if arg1 ~= addonName then return end
         BattleMaps.Battlegrounds:RefreshLocalizedAliases()
         local db = BattleMaps.Database:Initialize()
@@ -120,13 +124,6 @@ Events:SetScript("OnEvent", function(_, event, ...)
 
     if event == "PLAYER_LOGIN" then
         DelayedLocationRefresh()
-    elseif event == "CHAT_MSG_RAID_WARNING" then
-        -- Player-issued /rw remains Blizzard-owned. If a preceding BG-system
-        -- notice temporarily hid RaidWarningFrame to avoid a duplicate, restore
-        -- it immediately so the player's warning uses Blizzard's normal layout.
-        if BattleMaps.Notifications then
-            BattleMaps.Notifications:RestoreNativeDisplayAlpha()
-        end
     elseif event == "CHAT_MSG_BG_SYSTEM_ALLIANCE" or event == "CHAT_MSG_BG_SYSTEM_HORDE" or event == "CHAT_MSG_BG_SYSTEM_NEUTRAL" then
         -- Keep BattleMaps completely out of arena/Solo Shuffle warning handling.
         -- These event names may be observed outside a real battleground.
@@ -168,6 +165,10 @@ Events:SetScript("OnEvent", function(_, event, ...)
         if C_Timer and C_Timer.After and BattleMaps.Notifications then
             C_Timer.After(0.50, function() BattleMaps.Notifications:Apply() end)
             C_Timer.After(1.50, function() BattleMaps.Notifications:Apply() end)
+        end
+    elseif event == "PLAYER_TARGET_CHANGED" then
+        if BattleMaps.Pins and BattleMaps.Pins.RefreshFriendlyTargetHighlight then
+            BattleMaps.Pins:RefreshFriendlyTargetHighlight(true)
         end
     elseif event == "GROUP_ROSTER_UPDATE" or event == "PLAYER_ROLES_ASSIGNED" or event == "ROLE_CHANGED_INFORM" then
         if BattleMaps.MapFrame.frame and BattleMaps.MapFrame.frame:IsShown() then

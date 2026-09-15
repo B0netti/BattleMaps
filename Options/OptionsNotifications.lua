@@ -163,8 +163,15 @@ function Options:CreateNotificationsPage(parent)
     local reset = MakeButton(appearance, "Reset Position", 112)
     reset:SetPoint("LEFT", preview, "RIGHT", 8, 0)
     reset:SetScript("OnClick", function()
-        BattleMaps.Notifications:ResetPosition()
-        self:Refresh()
+        BattleMaps.ConfirmReset(
+            "Reset notification position",
+            "Restore the notification area's saved position and offsets to their defaults.",
+            function()
+                BattleMaps.Notifications:ResetPosition()
+                self:Refresh()
+            end,
+            "Reset"
+        )
     end)
 end
 

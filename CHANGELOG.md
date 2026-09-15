@@ -1,4 +1,129 @@
+## 3.1.0
+- Added four per-callout edge-context text fields to the combined Callout Editor (Top, Right, Bottom, Left).
+- Edge-swipe context is now stored independently for each callout, so Incoming, Attack, Defend, Clear, and custom actions can use different directional context strings.
+- Reduced the macro editor height to make room for the new context controls without enlarging the dialog. Blank context fields intentionally add no text.
+- Restore Default in the Callout Editor now restores the binding, macro, and that callout's four edge-context strings together.
+
+## 3.0.40
+- Changed edge-drag context triggers to a fixed 1-pixel map boundary and removed the Edge zone slider.
+- Removed held callout text previews and their placement option from the Callouts page.
+- Replaced the large edge-zone overlay/labels with a compact additive glow drawn just inside the triggered BattleMaps edge.
+- Edge-trigger glow now uses the active callout's existing animation color (Incoming/Attack/Defend/Clear/Custom) so the drag feedback matches the selected action.
+
+## 3.0.39
+- Fixed release-confirmation effects jumping back into the normal two-icon hover positions during pin/layout refreshes.
+- The selected callout icon, additive glow, and ping flipbook now remain locked to the objective centre for the full confirmation presentation; auxiliary effects are anchored directly to the chosen icon.
+- Extended the post-click visual suppression window to cover the longest confirmation effect, preventing the hover pair from reappearing underneath a still-running flipbook.
+
+## 3.0.38
+- Changed edge-drag callouts from "release inside the zone" to a swipe-through trigger: crossing an edge trigger selects its context and the pointer can continue past the BattleMaps frame before release.
+- Held preview/edge highlighting now remains contextual while the cursor is beyond the corresponding map edge.
+- Secure release selection now accepts coordinates outside the map rectangle, while retaining the minimum drag-distance guard against accidental context.
+
+## 3.0.37
+- Added confirmation prompts to every BattleMaps reset/restore control before settings are changed.
+- Covered section reset icons, notification position reset, selected-map reset, full-map view reset, callout macro reset, and the callout editor's Restore Default action.
+- Reset confirmations use explicit Reset/Restore and Cancel actions; canceling leaves all settings untouched.
+
+## 3.0.36
+- Fixed edge-drag secure handler error (`Invalid relative frame handle`) by using the restricted environment's built-in `$screen` and `$parent` anchors instead of unprotected frame references.
+- Corrected secure drag coordinate handling to use normalized screen coordinates, matching restricted `GetMousePosition()` behavior.
+
+## 3.0.35
+- Added combat-safe edge-drag context for objective callouts: hold a bound callout, drag toward a map edge, and release to append tactical context (top = stealth, right = 2, bottom = 1, left = 3).
+- Callout presses can now leave the objective hit area without being canceled; releasing away from an edge sends the normal callout.
+- Added a four-edge drag overlay with live highlighting and live held-text preview updates (for example, `INC BS` becomes `INC BS 3`).
+- Added **Edge drag context** and **Edge zone** controls to the Callouts page, plus optional `[context]` macro substitution support.
+- Edge context selection requires a short drag distance before it can activate, preventing nodes already near a map edge from adding context on an ordinary click.
+
+## 3.0.34
+- Centered a lone hover callout and the actively pressed callout over the objective.
+- Added held-callout text previews with Cursor, BattleMaps frame, Objective, and Off placement options.
+- A valid callout press now remains visually armed after the cursor leaves the objective, until mouse-up; release outside still cancels the secure click for now.
+
+## 3.0.33
+- Callout action rows now place the callout title and its binding visual on one line.
+- Added dedicated ALT, CTRL, and SHIFT keycap textures for modifier bindings.
+- Modifier artwork is used in both the callout list and combined callout editor, with generated keycaps retained as fallback.
+
+## 3.0.32
+
+- Combined callout binding and macro configuration into one Edit Callout panel.
+- Moved each callout cog to the left of its icon and removed the separate Macro button.
+- Simplified binding capture feedback and fixed the overlapping binding-dialog text layout.
+- Save/Cancel now apply to the binding and macro as one edit session; Restore Default resets both pending values.
+
+## 3.0.31
+
+- Moved macro substitution help from the main Callouts page into the macro editor.
+- Removed the long example macro line beneath the editor for a cleaner layout.
+
+## 3.0.30
+
+- While a callout mouse button is held down, only that button's bound callout icon is shown; the opposite LMB/RMB hover icon is hidden until the press ends.
+- Preserved the exclusive pressed-state visual while re-entering a node or while modifier polling refreshes during a held click.
+
+## 3.0.29
+
+- Replaced the always-visible one-line callout message fields with compact **Macro** buttons beside each fixed callout action.
+- Added a full multiline macro editor with Save, Cancel, per-action Default, character count, and `[node]` / `[node_full]` substitutions.
+- Callout clicks now execute the complete user-editable secure macro, allowing normal macro commands such as `/ping` to be combined with `/instance` messages while retaining combat-safe delivery.
+- Removed the separate **Ping with INC** checkbox. Existing profiles that had it enabled are migrated by folding the target/self ping command into their Incoming macro.
+- Preserved customised legacy callout text by automatically migrating it into `/instance` macro templates on first load.
+
+## 3.0.28
+
+- Callout hover now shows both currently bound left- and right-click callout icons side-by-side.
+- The hovered base is hidden only when at least one left/right callout is available for the active modifier state.
+- Mouse-down feedback now depresses only the icon for the mouse button being pressed.
+- Successful clicks keep the matching callout icon for the release/confirmation animation.
+
+## 3.0.27
+- Updated optional INC ping behavior so a hostile target gets an Attack ping, a friendly target gets an Assist ping, and no target falls back to an Assist ping on the player.
+- Renamed the Callouts option to **Ping with INC** and updated its tooltip to describe the self-ping fallback.
+
+## 3.0.26
+- Fixed the callout binding capture dialog rendering behind the BattleMaps options window.
+- Added clear live feedback while capturing a binding, conflict/replace messaging, and an explicit saved confirmation.
+- Binding icons now refresh immediately after saving.
+
 # BattleMaps changelog
+
+## 3.0.25
+
+- Added an optional **Ping target with INC** setting for objective callouts. When enabled, the same secure click that sends the INC message also runs `/ping [@target,exists,harm] attack; [@target,exists,noharm] assist`.
+- The ping remains inside the secure macro path, so the reliable `/instance` callout delivery from 3.0.24 is preserved. No target simply means no ping.
+
+## 3.0.24
+
+- Restored objective callout delivery to the secure `/instance` macro path after the experimental Lua-side spam throttle prevented messages from reaching instance chat.
+- Removed the experimental callout spam throttle so LMB/RMB and modifier callouts remain reliable in battleground combat.
+
+## 3.0.23
+
+- Experimental callout spam protection build. Superseded by 3.0.24 because routing chat through Lua prevented reliable instance-chat delivery.
+
+## 3.0.22
+
+- Restored right-click objective callouts: plain **LMB** now sends **INC** and plain **RMB** sends **Clear** by default.
+- Reworked callout bindings to store both modifier keys and mouse buttons, with Left/Right/Middle Mouse plus Shift/Ctrl/Alt combinations supported by the secure callout buttons.
+- Replaced the old binding dropdowns with fixed callout rows, compact mouse/modifier visuals, and a cog-driven capture dialog with Save, Cancel, Clear Binding, and explicit conflict replacement.
+- Simplified the Units page by moving **Highlight target** under **Team Units**, removing the separate Friendly Target panel, and converting **Healers** to the same inline dropdown style as Pin/FoV.
+- Fixed friendly-target highlighting so healer targets use the same ring footprint as other teammates instead of growing with the healer icon size.
+
+## 3.0.21
+
+- Added a live friendly-target highlight for teammate map pins, rendered as a separate white/gold exterior ring so existing class, healer, and combat-state visuals remain unchanged.
+- Friendly-target matching uses group unit tokens and `UnitIsUnit` rather than GUID reads, and the highlight follows BattleMaps' live stacked-pin offsets.
+- Added a short acquisition pulse plus Units-page controls for enabling the highlight, adjusting ring size, and toggling the pulse.
+- Target changes now refresh immediately via `PLAYER_TARGET_CHANGED`; non-group, hostile, missing, and Test Mode targets are ignored cleanly.
+
+## 3.0.20
+
+- Hardened battleground notifications against the Retail RaidWarningFrame secret-number taint path.
+- BattleMaps now takes event ownership of the BG-system and battleground boss-emote warnings it replaces before they reach Blizzard's RaidWarningFrame, rather than hiding the native frame with SetAlpha after delivery.
+- Player `/rw` remains fully Blizzard-owned and BattleMaps no longer registers for `CHAT_MSG_RAID_WARNING`.
+- Native battleground warning events are restored automatically when BattleMaps notifications stop managing the current context.
 
 ## 3.0.19
 

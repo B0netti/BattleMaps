@@ -98,7 +98,17 @@ local function MakeResetIconButton(parent, tooltipTitle, tooltipText, onClick)
         icon:SetTexture("Interface\\Buttons\\UI-RefreshButton")
     end
     button.icon = icon
-    button:SetScript("OnClick", onClick)
+    button:SetScript("OnClick", function()
+        HideBattleMapsTooltip(button)
+        if BattleMaps.ConfirmReset then
+            BattleMaps.ConfirmReset(
+                tooltipTitle or "Reset to defaults",
+                tooltipText or "Restore these settings to their defaults.",
+                onClick,
+                "Reset"
+            )
+        end
+    end)
     button:HookScript("OnEnter", function(owner)
         ShowBattleMapsTooltip(
             owner,

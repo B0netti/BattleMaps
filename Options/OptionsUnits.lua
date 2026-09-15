@@ -173,6 +173,15 @@ function Options:CreateUnitsPage(parent)
     AddControlTooltip(self.teamPinNamesCheck, "Mouseover names",
         "Shows Blizzard's native teammate tooltip when hovering live team pins. BattleMaps does not resolve or recolour live unit names; Test Mode keeps its synthetic preview names.")
 
+    self.friendlyTargetHighlightCheck = MakeCheckbox(team, "Highlight target", 10, -114,
+        function() return self:GetUnitsTarget().highlightFriendlyTarget ~= false end,
+        function(value)
+            self:GetUnitsTarget().highlightFriendlyTarget = value
+            if BattleMaps.Pins then BattleMaps.Pins:RefreshFriendlyTargetHighlight(true) end
+        end)
+    AddControlTooltip(self.friendlyTargetHighlightCheck, "Highlight target",
+        "Draws an exterior ring around your current friendly group target. The highlight follows live stacked-pin offsets and keeps one consistent teammate footprint, including healers.")
+
     self.teamMemberSizeSlider = MakeSlider(team, "Team Members", 210, -30, 3, 32, 1,
         function() return tonumber(self:GetUnitsTarget().teamMemberPinSize) or 12 end,
         function(value)
@@ -201,7 +210,7 @@ function Options:CreateUnitsPage(parent)
     AddControlTooltip(self.healerSizeSlider, "Healer icon size",
         "Scales the healer icon relative to its standard size. 100% is the default size.")
 
-    self.healerPinStyleDropdown = MakeDropdown(team, "Healers", 210, -84, 250,
+    self.healerPinStyleDropdown = MakeDropdown(team, "Healers", 210, -84, 180,
         function()
             return {
                 { value = "circle", label = "Icon + circle" },
@@ -221,7 +230,9 @@ function Options:CreateUnitsPage(parent)
                 BattleMaps.Pins:RefreshGroup()
             end
         end,
-        false)
+        true)
+    self.healerPinStyleDropdown.button:SetWidth(120)
+    self.healerPinStyleDropdown.menu:SetWidth(120)
     AddControlTooltip(self.healerPinStyleDropdown, "Healers",
         "Icon + circle keeps the normal team pin beneath the healer glyph. Icon shows only the healer glyph. Ignore renders healers as ordinary teammates.")
 

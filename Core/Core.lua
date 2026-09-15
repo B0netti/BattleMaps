@@ -2,8 +2,8 @@ local addonName, BattleMaps = ...
 
 _G.BattleMaps = BattleMaps
 BattleMaps.addonName = addonName
-BattleMaps.VERSION = "3.0.19"
-BattleMaps.BUILD = "3.0.19"
+BattleMaps.VERSION = "3.1.0"
+BattleMaps.BUILD = "3.1.0"
 
 BattleMaps.COLORS = {
     red = { 0.77, 0.17, 0.16 },
@@ -100,6 +100,60 @@ end
 function BattleMaps.Chat(...)
     local prefix = BattleMaps.ColorText(BattleMaps.COLORS.parchment, "BattleMaps:")
     print(prefix, ...)
+end
+
+local RESET_CONFIRM_DIALOG = "BATTLEMAPS_CONFIRM_RESET"
+
+local function EnsureResetConfirmationDialog()
+    if type(StaticPopupDialogs) ~= "table" or type(StaticPopup_Show) ~= "function" then
+        return false
+    end
+
+    if not StaticPopupDialogs[RESET_CONFIRM_DIALOG] then
+        StaticPopupDialogs[RESET_CONFIRM_DIALOG] = {
+            text = "%s",
+            button1 = "Reset",
+            button2 = CANCEL or "Cancel",
+            OnAccept = function(_, data)
+                local callback = type(data) == "table" and data.callback or nil
+                if type(callback) == "function" then callback() end
+            end,
+            OnShow = function(self, data)
+                if self and self.button1 and self.button1.SetText then
+                    self.button1:SetText((type(data) == "table" and data.confirmLabel) or "Reset")
+                end
+            end,
+            timeout = 0,
+            whileDead = true,
+            hideOnEscape = true,
+            preferredIndex = 3,
+        }
+    end
+    return true
+end
+
+-- Central reset confirmation used by every destructive Reset/Restore control.
+-- Never silently falls through to the reset action if Blizzard's popup system
+-- is unavailable; that preserves the user's explicit confirmation requirement.
+function BattleMaps.ConfirmReset(title, description, callback, confirmLabel)
+    if type(callback) ~= "function" then return false end
+    if not EnsureResetConfirmationDialog() then
+        BattleMaps.Chat("Unable to open the reset confirmation dialog.")
+        return false
+    end
+
+    title = tostring(title or "Reset settings")
+    description = tostring(description or "Restore these settings to their defaults.")
+    local message = title .. "?\n\n" .. description
+    local data = {
+        callback = callback,
+        confirmLabel = tostring(confirmLabel or "Reset"),
+    }
+    local popup = StaticPopup_Show(RESET_CONFIRM_DIALOG, message, nil, data)
+    if popup and popup.button1 and popup.button1.SetText then
+        popup.button1:SetText(data.confirmLabel)
+    end
+    return popup ~= nil
 end
 
 function BattleMaps.Debug(...)
@@ -1353,9 +1407,9 @@ local Notifications = {
     nativeStates = {},
     recentFactionByMessage = {},
     recentClassByPlayerName = {},
-    -- WoW 12.x taint-hardening: BattleMaps may reposition/scale the native
-    -- RaidWarningFrame, but it deliberately does not inspect or mutate its
-    -- pooled FontStrings and never replaces RaidNotice_AddMessage.
+    -- WoW 12.x taint-hardening: custom battleground notifications avoid the
+    -- native RaidWarningFrame entirely. BattleMaps temporarily unregisters only
+    -- the BG-system / BG boss-emote events it replaces; player /rw stays native.
     nativeFramePlacementEnabled = true,
     nativeTextStylingEnabled = false,
     customPresentationEnabled = true,
@@ -1482,6 +1536,64 @@ function Notifications:InstallChatFilters()
     ChatFrame_AddMessageEventFilter("CHAT_MSG_BG_SYSTEM_ALLIANCE", FilterCrystalInstruction)
     ChatFrame_AddMessageEventFilter("CHAT_MSG_BG_SYSTEM_HORDE", FilterCrystalInstruction)
     ChatFrame_AddMessageEventFilter("CHAT_MSG_BG_SYSTEM_NEUTRAL", FilterCrystalInstruction)
+end
+
+local NATIVE_BG_WARNING_EVENTS = {
+    "CHAT_MSG_BG_SYSTEM_ALLIANCE",
+    "CHAT_MSG_BG_SYSTEM_HORDE",
+    "CHAT_MSG_BG_SYSTEM_NEUTRAL",
+    "RAID_BOSS_EMOTE",
+}
+
+function Notifications:SetNativeBattlegroundWarningEventsSuppressed(suppress)
+    local frame = _G.RaidWarningFrame
+
+    if suppress then
+        if self.nativeBGWarningEventsSuppressed and self.nativeBGWarningFrame == frame then
+            return true
+        end
+        if not frame or type(frame.IsEventRegistered) ~= "function"
+            or type(frame.UnregisterEvent) ~= "function" then
+            return false
+        end
+
+        -- BattleMaps owns these battleground-only warnings while its custom
+        -- notification presenter is active. Remove them from Blizzard's global
+        -- RaidWarningFrame before the event fires instead of hiding/repositioning
+        -- that frame after the fact. This keeps secret PvP strings out of the
+        -- native pooled FontStrings while leaving CHAT_MSG_RAID_WARNING (/rw)
+        -- completely Blizzard-owned.
+        local registered = {}
+        for _, eventName in ipairs(NATIVE_BG_WARNING_EVENTS) do
+            local ok, isRegistered = pcall(frame.IsEventRegistered, frame, eventName)
+            registered[eventName] = ok and isRegistered == true
+            if registered[eventName] then
+                pcall(frame.UnregisterEvent, frame, eventName)
+            end
+        end
+
+        self.nativeBGWarningFrame = frame
+        self.nativeBGWarningRegistered = registered
+        self.nativeBGWarningEventsSuppressed = true
+        return true
+    end
+
+    if not self.nativeBGWarningEventsSuppressed then return true end
+
+    local restoreFrame = self.nativeBGWarningFrame or frame
+    local registered = self.nativeBGWarningRegistered or {}
+    if restoreFrame and type(restoreFrame.RegisterEvent) == "function" then
+        for _, eventName in ipairs(NATIVE_BG_WARNING_EVENTS) do
+            if registered[eventName] then
+                pcall(restoreFrame.RegisterEvent, restoreFrame, eventName)
+            end
+        end
+    end
+
+    self.nativeBGWarningFrame = nil
+    self.nativeBGWarningRegistered = nil
+    self.nativeBGWarningEventsSuppressed = false
+    return true
 end
 
 function Notifications:GetManagedFrames()
@@ -2049,75 +2161,6 @@ function Notifications:ApplyDisplayLayout()
     end
 end
 
-function Notifications:SuppressNativeForDisplay(duration)
-    local frame = _G.RaidWarningFrame
-    if not frame or not frame.GetAlpha or not frame.SetAlpha then return end
-
-    if self.nativeDisplayAlpha == nil then
-        local ok, alpha = pcall(frame.GetAlpha, frame)
-        self.nativeDisplayAlpha = ok and alpha or 1
-    end
-    pcall(frame.SetAlpha, frame, 0)
-
-    self.nativeSuppressSerial = (self.nativeSuppressSerial or 0) + 1
-    local serial = self.nativeSuppressSerial
-    if C_Timer and C_Timer.After then
-        C_Timer.After(tonumber(duration) or 3.2, function()
-            if Notifications.nativeSuppressSerial ~= serial then return end
-            local native = _G.RaidWarningFrame
-            if native and native.SetAlpha then
-                pcall(native.SetAlpha, native, Notifications.nativeDisplayAlpha or 1)
-            end
-            Notifications.nativeDisplayAlpha = nil
-        end)
-    end
-end
-
-function Notifications:RestoreNativeDisplayAlpha()
-    self.nativeSuppressSerial = (self.nativeSuppressSerial or 0) + 1
-    local frame = _G.RaidWarningFrame
-    if frame and frame.SetAlpha and self.nativeDisplayAlpha ~= nil then
-        pcall(frame.SetAlpha, frame, self.nativeDisplayAlpha or 1)
-    end
-    self.nativeDisplayAlpha = nil
-end
-
-function Notifications:SuppressNativeBossEmoteForDisplay(duration)
-    -- Boss-emote battleground notices use a different Blizzard warning frame
-    -- from player /rw. Suppress only that frame while BattleMaps presents the
-    -- objective message, leaving RaidWarningFrame available to players.
-    local frame = _G.RaidBossEmoteFrame
-    if not frame or not frame.GetAlpha or not frame.SetAlpha then return end
-
-    if self.nativeBossEmoteAlpha == nil then
-        local ok, alpha = pcall(frame.GetAlpha, frame)
-        self.nativeBossEmoteAlpha = ok and alpha or 1
-    end
-    pcall(frame.SetAlpha, frame, 0)
-
-    self.nativeBossEmoteSuppressSerial = (self.nativeBossEmoteSuppressSerial or 0) + 1
-    local serial = self.nativeBossEmoteSuppressSerial
-    if C_Timer and C_Timer.After then
-        C_Timer.After(tonumber(duration) or 3.2, function()
-            if Notifications.nativeBossEmoteSuppressSerial ~= serial then return end
-            local native = _G.RaidBossEmoteFrame
-            if native and native.SetAlpha then
-                pcall(native.SetAlpha, native, Notifications.nativeBossEmoteAlpha or 1)
-            end
-            Notifications.nativeBossEmoteAlpha = nil
-        end)
-    end
-end
-
-function Notifications:RestoreNativeBossEmoteDisplayAlpha()
-    self.nativeBossEmoteSuppressSerial = (self.nativeBossEmoteSuppressSerial or 0) + 1
-    local frame = _G.RaidBossEmoteFrame
-    if frame and frame.SetAlpha and self.nativeBossEmoteAlpha ~= nil then
-        pcall(frame.SetAlpha, frame, self.nativeBossEmoteAlpha or 1)
-    end
-    self.nativeBossEmoteAlpha = nil
-end
-
 function Notifications:GetBattlegroundMessageFaction(event, message)
     local faction
     if event == "CHAT_MSG_BG_SYSTEM_ALLIANCE" then
@@ -2304,14 +2347,9 @@ function Notifications:ShowBattlegroundMessage(event, message, displayTime)
     frame:Raise()
 
     local duration = BattleMaps.Clamp(tonumber(displayTime) or 3.2, 1.0, 10.0)
-    if event == "CHAT_MSG_RAID_BOSS_EMOTE" or event == "RAID_BOSS_EMOTE" then
-        self:SuppressNativeBossEmoteForDisplay(math.max(duration, 10.0))
-    else
-        -- Existing BG-system warnings can also be mirrored into Blizzard's raid
-        -- warning frame. Hide that duplicate, but CHAT_MSG_RAID_WARNING restores
-        -- the native frame immediately so player /rw remains Blizzard-owned.
-        self:SuppressNativeForDisplay(duration)
-    end
+    -- Native BG-system / boss-emote event ownership is changed proactively by
+    -- Apply(). Do not SetAlpha, move, resize, style, or otherwise mutate
+    -- RaidWarningFrame while a warning is being displayed.
 
     self.displaySerial = (self.displaySerial or 0) + 1
     local serial = self.displaySerial
@@ -2615,6 +2653,9 @@ function Notifications:Apply()
     self:AnchorMover()
 
     local shouldManage = self:ShouldManage()
+    local ownsBattlegroundWarnings = self.customPresentationEnabled == true and shouldManage
+    self:SetNativeBattlegroundWarningEventsSuppressed(ownsBattlegroundWarnings)
+
     local shouldPlace = self.customPresentationEnabled ~= true
         and self.nativeFramePlacementEnabled == true
         and shouldManage
@@ -2629,8 +2670,6 @@ function Notifications:Apply()
         self:ApplyDisplayLayout()
         if not shouldManage then
             if self.displayFrame then self.displayFrame:Hide() end
-            self:RestoreNativeDisplayAlpha()
-            self:RestoreNativeBossEmoteDisplayAlpha()
         end
     end
 

@@ -824,7 +824,20 @@ function MapFrame:GetContextMenuItems()
             },
             {
                 text = "Reset Full Map View",
-                action = function() self:ResetWorldMapView() end,
+                action = function()
+                    local mapID = tonumber(self.currentMapID)
+                    local mapName = BattleMaps.GetBattlegroundNameForConfig
+                        and BattleMaps.GetBattlegroundNameForConfig(mapID)
+                        or (BattleMaps.Battlegrounds and BattleMaps.Battlegrounds:GetName(mapID))
+                        or "this battleground"
+                    self:HideContextMenu()
+                    BattleMaps.ConfirmReset(
+                        "Reset " .. tostring(mapName) .. " full-map view",
+                        "Restore the saved full-map position, pan, and zoom for this battleground to their defaults.",
+                        function() self:ResetWorldMapView(mapID) end,
+                        "Reset"
+                    )
+                end,
             },
             { text = "Options", action = OpenOptions },
             { text = "Cancel", action = DismissMenu },
@@ -1375,6 +1388,9 @@ function MapFrame:SetMapID(mapID, forcePlacement)
     BattleMaps.MapRenderer:SetMapID(mapID)
     self:LayoutView()
     self:UpdateFovBoundaryPreview()
+    if BattleMaps.Callouts and BattleMaps.Callouts.RequestSecureRefresh then
+        BattleMaps.Callouts:RequestSecureRefresh()
+    end
     if BattleMaps.Pins then BattleMaps.Pins:RefreshAll(true) end
     return true
 end
@@ -1501,6 +1517,9 @@ function MapFrame:CommitEdit()
     self:SetEditMode(false)
     self:ResetTransientView()
     self:LayoutView()
+    if BattleMaps.Callouts and BattleMaps.Callouts.RequestSecureRefresh then
+        BattleMaps.Callouts:RequestSecureRefresh()
+    end
 
     local mapID = self.currentMapID
     if mapID then
@@ -1538,6 +1557,9 @@ function MapFrame:CancelEdit()
     self:SetEditMode(false)
     self:ResetTransientView()
     self:LayoutView()
+    if BattleMaps.Callouts and BattleMaps.Callouts.RequestSecureRefresh then
+        BattleMaps.Callouts:RequestSecureRefresh()
+    end
 end
 
 function MapFrame:SetEditMode(enabled)

@@ -16,6 +16,9 @@ local PIN_DEFAULTS = {
 
 local PLAYER_PIN_DEFAULTS = {
     showTeamPinNames = true,
+    highlightFriendlyTarget = true,
+    friendlyTargetHighlightScale = 1.55,
+    friendlyTargetHighlightPulse = true,
     playerArrowSize = PIN_DEFAULTS.playerArrowSize,
     playerPinStyle = "arrow",
     playerFovStyle = "coldRays",
@@ -188,6 +191,9 @@ local ROOT_DEFAULTS = {
     useGlobalNotificationSettings = true,
     playerArrowSize = PIN_DEFAULTS.playerArrowSize,
     showTeamPinNames = PLAYER_PIN_DEFAULTS.showTeamPinNames,
+    highlightFriendlyTarget = PLAYER_PIN_DEFAULTS.highlightFriendlyTarget,
+    friendlyTargetHighlightScale = PLAYER_PIN_DEFAULTS.friendlyTargetHighlightScale,
+    friendlyTargetHighlightPulse = PLAYER_PIN_DEFAULTS.friendlyTargetHighlightPulse,
     playerPinStyle = PLAYER_PIN_DEFAULTS.playerPinStyle,
     playerFovStyle = PLAYER_PIN_DEFAULTS.playerFovStyle,
     playerFovScale = PLAYER_PIN_DEFAULTS.playerFovScale,
@@ -1621,6 +1627,13 @@ function Database:Initialize()
     -- never let it override the canonical value on startup.
     BattleMapsDB.movePlayerAurasToMinimapArea = BattleMapsDB.bgLayoutMovePlayerAuras
     BattleMapsDB.showTeamPinNames = BattleMapsDB.showTeamPinNames ~= false
+    BattleMapsDB.highlightFriendlyTarget = BattleMapsDB.highlightFriendlyTarget ~= false
+    BattleMapsDB.friendlyTargetHighlightScale = BattleMaps.Clamp(
+        tonumber(BattleMapsDB.friendlyTargetHighlightScale) or PLAYER_PIN_DEFAULTS.friendlyTargetHighlightScale,
+        1.20,
+        2.50
+    )
+    BattleMapsDB.friendlyTargetHighlightPulse = BattleMapsDB.friendlyTargetHighlightPulse ~= false
     BattleMapsDB.stackTeamPins = BattleMapsDB.stackTeamPins ~= false
     BattleMapsDB.excludePlayerArrowFromStack = BattleMapsDB.excludePlayerArrowFromStack == true
     BattleMapsDB.fanOutTeamPinsOnHover = BattleMapsDB.fanOutTeamPinsOnHover ~= false
@@ -1735,6 +1748,13 @@ function Database:Initialize()
         config.playerPins.healerPinStyle = ({ circle = true, icon = true, ignore = true })[config.playerPins.healerPinStyle]
             and config.playerPins.healerPinStyle or PLAYER_PIN_DEFAULTS.healerPinStyle
         config.playerPins.showTeamPinNames = config.playerPins.showTeamPinNames ~= false
+        config.playerPins.highlightFriendlyTarget = config.playerPins.highlightFriendlyTarget ~= false
+        config.playerPins.friendlyTargetHighlightScale = BattleMaps.Clamp(
+            tonumber(config.playerPins.friendlyTargetHighlightScale) or PLAYER_PIN_DEFAULTS.friendlyTargetHighlightScale,
+            1.20,
+            2.50
+        )
+        config.playerPins.friendlyTargetHighlightPulse = config.playerPins.friendlyTargetHighlightPulse ~= false
         config.playerPins.stackTeamPins = config.playerPins.stackTeamPins ~= false
         config.playerPins.fanOutTeamPinsOnHover = config.playerPins.fanOutTeamPinsOnHover ~= false
         config.playerPins.excludePlayerArrowFromStack = config.playerPins.excludePlayerArrowFromStack == true
@@ -2054,6 +2074,13 @@ function Database:ResetPlayerPins(mapID)
     local source = GetCategoryResetSource(mapID, PLAYER_PIN_DEFAULTS, "playerPins", useGlobal)
     ResetDefaults(source, target)
     target.showTeamPinNames = source.showTeamPinNames ~= false
+    target.highlightFriendlyTarget = source.highlightFriendlyTarget ~= false
+    target.friendlyTargetHighlightScale = BattleMaps.Clamp(
+        tonumber(source.friendlyTargetHighlightScale) or PLAYER_PIN_DEFAULTS.friendlyTargetHighlightScale,
+        1.20,
+        2.50
+    )
+    target.friendlyTargetHighlightPulse = source.friendlyTargetHighlightPulse ~= false
     target.teamPinBorderScale = BattleMaps.Clamp(
         tonumber(source.teamPinBorderScale) or PLAYER_PIN_DEFAULTS.teamPinBorderScale,
         0.50,

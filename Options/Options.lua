@@ -1014,34 +1014,41 @@ function Options:CreateMapSelector(frame)
     end)
     reset:SetScript("OnClick", function()
         local mapID = tonumber(self.selectedMapID)
-        local mapFrame = BattleMaps.MapFrame
-        local wasEditing = mapFrame and mapFrame.editMode == true
-            and tonumber(mapFrame.currentMapID) == mapID
-
-        self:StopSelectedMapTest()
-        if wasEditing then
-            -- End the old edit snapshot before replacing the selected map's
-            -- saved settings, then resume editing from the reset defaults.
-            mapFrame:CancelEdit()
-        end
-
-        if not BattleMaps.Database:ResetMapSettings(mapID) then
-            BattleMaps.Chat("The selected battleground could not be reset.")
-            return
-        end
-
-        if mapFrame and tonumber(mapFrame.currentMapID) == mapID then
-            mapFrame:SetMapID(mapID, true)
-            if wasEditing then mapFrame:BeginEdit() end
-        end
-
-        self:Refresh()
-        if BattleMaps.Pins then BattleMaps.Pins:RefreshAll(true) end
-
         local mapName = BattleMaps.GetBattlegroundNameForConfig
             and BattleMaps.GetBattlegroundNameForConfig(mapID)
             or BattleMaps.Battlegrounds:GetName(mapID)
-        BattleMaps.Chat("Reset all map settings for " .. tostring(mapName) .. ".")
+
+        BattleMaps.ConfirmReset(
+            "Reset " .. tostring(mapName) .. " map settings",
+            "Restore the selected battleground's authored size, zoom, pan, unit, objective, flag, cart, and timer defaults. The current screen position is preserved. Global pin settings are not changed.",
+            function()
+                local mapFrame = BattleMaps.MapFrame
+                local wasEditing = mapFrame and mapFrame.editMode == true
+                    and tonumber(mapFrame.currentMapID) == mapID
+
+                self:StopSelectedMapTest()
+                if wasEditing then
+                    -- End the old edit snapshot before replacing the selected map's
+                    -- saved settings, then resume editing from the reset defaults.
+                    mapFrame:CancelEdit()
+                end
+
+                if not BattleMaps.Database:ResetMapSettings(mapID) then
+                    BattleMaps.Chat("The selected battleground could not be reset.")
+                    return
+                end
+
+                if mapFrame and tonumber(mapFrame.currentMapID) == mapID then
+                    mapFrame:SetMapID(mapID, true)
+                    if wasEditing then mapFrame:BeginEdit() end
+                end
+
+                self:Refresh()
+                if BattleMaps.Pins then BattleMaps.Pins:RefreshAll(true) end
+                BattleMaps.Chat("Reset all map settings for " .. tostring(mapName) .. ".")
+            end,
+            "Reset"
+        )
     end)
 
     local test = MakeButton(selector, "Test", 58, 24)

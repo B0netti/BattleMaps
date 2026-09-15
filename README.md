@@ -42,7 +42,7 @@ Then start or restart World of Warcraft and enable **BattleMaps** in the charact
 
 ## Current status
 
-BattleMaps is under active development. The current source version is **3.0.19** and targets World of Warcraft Retail interface **120100**. More features are planned, and user feedback is appreciated.
+BattleMaps is under active development. The current source version is **3.1.0** and targets World of Warcraft Retail interface **120100**. More features are planned, and user feedback is appreciated.
 
 ## Reporting an issue
 
