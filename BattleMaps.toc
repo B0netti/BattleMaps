@@ -44,7 +44,6 @@ Objectives\CalloutCenterPreview.lua
 Options\Options.lua
 Options\OptionsWidgets.lua
 Options\OptionsGeneral.lua
-Options\OptionsGeneralPolish.lua
 Options\OptionsElvUI.lua
 Options\OptionsUnits.lua
 Options\OptionsBases.lua
