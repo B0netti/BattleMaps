@@ -37,6 +37,15 @@ function Callouts:IsDirectionalDragActive(actionKey)
         and self:HasConfiguredDragContext(actionKey)
 end
 
+-- Preview presentation follows the same arming rules as the click itself.
+-- Swipe-capable callouts remain armed after leaving the source node; classic
+-- 0/4 callouts are armed only while the pointer is still over the node.
+function Callouts:IsHeldPreviewArmed(ui)
+    if not ui or ui.pressActive ~= true then return false end
+    if self:IsDirectionalDragActive(ui.pressActionKey) then return true end
+    return ui.pressInside == true
+end
+
 -- The secure mouse-down snippet expands the protected button to $screen only
 -- when drag-action-* contains an action. Clear that marker for 0/4 callouts so
 -- the button retains its ordinary node-sized hit area and native click-cancel
@@ -116,6 +125,7 @@ if type(OriginalCreateNodeUI) == "function" then
             self:HideChoiceVisuals(ui)
             self:HideHeldPreview()
             self:HideDragContextOverlay()
+            if type(self.HideSelectedPreview) == "function" then self:HideSelectedPreview() end
         end)
 
         button:HookScript("OnEnter", function()
@@ -129,6 +139,7 @@ if type(OriginalCreateNodeUI) == "function" then
                 self:SetBaseHoverSuppressed(ui, true)
                 self:SetPressedState(ui, true, ui.pressButton)
             end
+            if type(self.ShowSelectedPreview) == "function" then self:ShowSelectedPreview(ui) end
         end)
 
         return ui
