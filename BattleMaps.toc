@@ -38,6 +38,7 @@ Objectives\PreviewPins.lua
 Objectives\CarriedObjectives.lua
 Objectives\ObjectivePins.lua
 Objectives\Callouts.lua
+Objectives\CalloutFeedback.lua
 Options\Options.lua
 Options\OptionsWidgets.lua
 Options\OptionsGeneral.lua
@@ -46,6 +47,7 @@ Options\OptionsUnits.lua
 Options\OptionsBases.lua
 Options\OptionsCarts.lua
 Options\OptionsCallouts.lua
+Options\OptionsCalloutFeedback.lua
 Options\OptionsFlags.lua
 Options\OptionsNotifications.lua
 Options\OptionsPolish.lua
