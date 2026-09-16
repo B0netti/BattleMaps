@@ -1,0 +1,45 @@
+name: Build outside-BG callout guard test
+
+on:
+  push:
+    branches:
+      - feature/callout-tether-preview
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out feature branch
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+      - name: Reject malformed modifier conditions
+        run: |
+          if grep -R -nE '\[mod:[^]]*,(ctrl|shift|alt)(,|])' Objectives/Callouts.lua Objectives/CalloutDragPolicy.lua; then
+            echo 'Invalid shorthand modifier condition remains.' >&2
+            exit 1
+          fi
+
+      - name: Validate Lua 5.1 syntax
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y lua5.1
+          LUAC="$(command -v luac5.1 || command -v luac)"
+          find . -type f -name '*.lua' -not -path './.git/*' -print0 | xargs -0 -n1 "$LUAC" -p
+
+      - name: Build clean addon archive
+        run: |
+          python3 .github/scripts/build_release.py --version 3.1.0 --output test-release
+          mv test-release/BattleMaps-3.1.0.zip test-release/BattleMaps-3.1.0-outside-bg-guard-test.zip
+          unzip -t test-release/BattleMaps-3.1.0-outside-bg-guard-test.zip
+
+      - name: Upload test package
+        uses: actions/upload-artifact@v4
+        with:
+          name: BattleMaps-outside-bg-guard-test
+          path: test-release/BattleMaps-3.1.0-outside-bg-guard-test.zip
+          if-no-files-found: error
+          retention-days: 7
