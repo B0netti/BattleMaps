@@ -38,6 +38,20 @@ local function Clamp01(value)
     return value
 end
 
+local function HasText(value)
+    return tostring(value or ""):match("%S") ~= nil
+end
+
+local function HasAnyConfiguredContext(actionKey)
+    if not actionKey or type(Callouts.GetActionContexts) ~= "function" then return false end
+    local contexts = Callouts:GetActionContexts(actionKey)
+    if type(contexts) ~= "table" then return false end
+    for _, key in ipairs({ "TOP", "RIGHT", "BOTTOM", "LEFT" }) do
+        if HasText(contexts[key]) then return true end
+    end
+    return false
+end
+
 local function GetCursorUIPosition()
     if type(GetCursorPosition) ~= "function" or not UIParent then return nil, nil end
     local x, y = GetCursorPosition()
@@ -164,7 +178,12 @@ function Callouts:UpdateDragFeedback(ui)
     -- then brings it in progressively as the gesture becomes deliberate.
     fade = fade * fade * (3 - (2 * fade))
 
-    local activeContext = ui.dragContextKey ~= nil and ui.dragContextKey ~= ""
+    local contextText = tostring(ui.dragContextText or "")
+    -- Crossing an edge that has no configured text is visually equivalent to
+    -- having no context there: no edge emphasis and no active/thick tether.
+    local activeContext = ui.dragContextKey ~= nil
+        and ui.dragContextKey ~= ""
+        and HasText(contextText)
     local r, g, b = GetActionColor(ui)
 
     if frame.showTether and fade > 0 then
@@ -197,7 +216,6 @@ function Callouts:UpdateDragFeedback(ui)
     -- cursor-attached. The text is the resolved chat preview (for example
     -- "INC BS"), and the existing context state updates it to "INC BS 3" as
     -- soon as the corresponding edge is crossed.
-    local contextText = tostring(ui.dragContextText or "")
     local previewText = ""
     if type(self.GetCalloutPreviewText) == "function" then
         previewText = tostring(self:GetCalloutPreviewText(ui.pressActionKey, ui.node, contextText) or "")
@@ -220,7 +238,11 @@ function Callouts:ActivateDragFeedback(ui)
         return
     end
 
+    -- A tether exists to communicate that this callout has directional
+    -- destinations. If none of its four directions contain context text, do
+    -- not draw one at all. Cursor preview remains independently available.
     local showTether = settings.showDragTether ~= false
+        and HasAnyConfiguredContext(ui.pressActionKey)
     local showPreview = settings.showDragPreview ~= false
     if not showTether and not showPreview then
         self:HideDragFeedback()
@@ -240,6 +262,20 @@ function Callouts:RefreshDragFeedbackSettings()
     local frame = self.dragFeedbackFrame
     if frame and frame.activeUI and frame.activeUI.pressActive == true then
         self:ActivateDragFeedback(frame.activeUI)
+    end
+end
+
+-- The core callout module still tracks the nearest crossed edge even when the
+-- configured string is blank, because the secure macro path needs a stable
+-- directional selection. Suppress only the visual edge glow in that case.
+local OriginalShowDragContextOverlay = Callouts.ShowDragContextOverlay
+if type(OriginalShowDragContextOverlay) == "function" then
+    function Callouts:ShowDragContextOverlay(activeKey, actionKey)
+        if activeKey and type(self.GetDragContextText) == "function" then
+            local text = self:GetDragContextText(activeKey, actionKey)
+            if not HasText(text) then activeKey = nil end
+        end
+        return OriginalShowDragContextOverlay(self, activeKey, actionKey)
     end
 end
 
