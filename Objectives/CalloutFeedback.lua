@@ -62,6 +62,13 @@ local function HasAnyConfiguredContext(actionKey)
     return false
 end
 
+local function IsPreviewArmed(ui)
+    if type(Callouts.IsHeldPreviewArmed) == "function" then
+        return Callouts:IsHeldPreviewArmed(ui)
+    end
+    return ui and ui.pressActive == true
+end
+
 local function GetCursorUIPosition()
     if type(GetCursorPosition) ~= "function" or not UIParent then return nil, nil end
     local x, y = GetCursorPosition()
@@ -260,7 +267,7 @@ function Callouts:UpdateDragFeedback(ui)
     if type(self.GetCalloutPreviewText) == "function" then
         previewText = tostring(self:GetCalloutPreviewText(ui.pressActionKey, ui.node, contextText) or "")
     end
-    if frame.showPreview and previewText ~= "" then
+    if frame.showPreview and IsPreviewArmed(ui) and previewText ~= "" then
         frame.previewText:ClearAllPoints()
         frame.previewText:SetPoint("BOTTOM", frame.cursorAnchor, "TOP", 0, CURSOR_PREVIEW_OFFSET_Y)
         frame.previewText:SetText(previewText)
@@ -280,7 +287,7 @@ function Callouts:ActivateDragFeedback(ui)
 
     local showTether = settings.showDragTether ~= false
         and HasAnyConfiguredContext(ui.pressActionKey)
-    local showPreview = self:GetPreviewMode() == "CURSOR"
+    local showPreview = self:GetPreviewMode() == "CURSOR" and IsPreviewArmed(ui)
     if not showTether and not showPreview then
         -- The press is still active; only this module has nothing to draw.
         -- Do not invoke the public cleanup path here, because Same as
