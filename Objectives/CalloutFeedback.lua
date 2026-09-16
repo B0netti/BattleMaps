@@ -8,7 +8,10 @@ local Callouts = BattleMaps.Callouts
 -- This module deliberately does not touch the secure click target or macro
 -- selection path; it only follows the state already maintained by Callouts.
 Callouts.DEFAULTS.showDragTether = true
+Callouts.DEFAULTS.previewMode = "CURSOR"
+-- Legacy aliases retained so older profiles migrate without a visible change.
 Callouts.DEFAULTS.showDragPreview = true
+Callouts.DEFAULTS.showCenterPreview = false
 
 local CURSOR_PREVIEW_OFFSET_Y = 18
 local TETHER_FADE_START = 10
@@ -21,6 +24,13 @@ local TETHER_CORE_ALPHA = 0.74
 local TETHER_GLOW_ALPHA = 0.24
 local TETHER_ACTIVE_CORE_ALPHA = 0.94
 local TETHER_ACTIVE_GLOW_ALPHA = 0.34
+
+local VALID_PREVIEW_MODES = {
+    OFF = true,
+    CURSOR = true,
+    CENTER = true,
+    NOTIFICATIONS = true,
+}
 
 local FALLBACK_ACTION_COLORS = {
     incoming = { 1.00, 0.28, 0.10 },
@@ -61,7 +71,36 @@ local function GetCursorUIPosition()
     return (tonumber(x) or 0) / scale, (tonumber(y) or 0) / scale
 end
 
-local function GetActionColor(ui)
+function Callouts:GetPreviewMode()
+    local settings = self:GetSettings()
+    local mode = tostring(settings.previewMode or ""):upper()
+    if VALID_PREVIEW_MODES[mode] then return mode end
+
+    -- One-time compatibility interpretation for builds that exposed the two
+    -- preview checkboxes separately. Centre took precedence if both were set.
+    if settings.showCenterPreview == true then
+        return "CENTER"
+    elseif settings.showDragPreview ~= false then
+        return "CURSOR"
+    end
+    return "OFF"
+end
+
+function Callouts:SetPreviewMode(mode)
+    local settings = self:GetSettings()
+    mode = tostring(mode or "OFF"):upper()
+    if not VALID_PREVIEW_MODES[mode] then mode = "OFF" end
+    settings.previewMode = mode
+
+    -- Keep legacy fields coherent for users moving between test builds.
+    settings.showDragPreview = mode == "CURSOR"
+    settings.showCenterPreview = mode == "CENTER"
+
+    if self.RefreshDragFeedbackSettings then self:RefreshDragFeedbackSettings() end
+    if self.RefreshSelectedPreviewSettings then self:RefreshSelectedPreviewSettings() end
+end
+
+function Callouts:GetFeedbackActionColor(ui)
     local visual = ui and ui.visuals and ui.visuals[ui.pressButton]
     local texture = visual and visual.Glow and visual.Glow.Texture
     if texture and type(texture.GetVertexColor) == "function" then
@@ -174,17 +213,13 @@ function Callouts:UpdateDragFeedback(ui)
     local distance = math.sqrt((dx * dx) + (dy * dy))
     local fadeRange = math.max(1, TETHER_FADE_END - TETHER_FADE_START)
     local fade = Clamp01((distance - TETHER_FADE_START) / fadeRange)
-    -- Smoothstep keeps the line almost imperceptible immediately after press,
-    -- then brings it in progressively as the gesture becomes deliberate.
     fade = fade * fade * (3 - (2 * fade))
 
     local contextText = tostring(ui.dragContextText or "")
-    -- Crossing an edge that has no configured text is visually equivalent to
-    -- having no context there: no edge emphasis and no active/thick tether.
     local activeContext = ui.dragContextKey ~= nil
         and ui.dragContextKey ~= ""
         and HasText(contextText)
-    local r, g, b = GetActionColor(ui)
+    local r, g, b = self:GetFeedbackActionColor(ui)
 
     if frame.showTether and fade > 0 then
         local coreThickness = activeContext and TETHER_ACTIVE_CORE_THICKNESS or TETHER_CORE_THICKNESS
@@ -212,10 +247,6 @@ function Callouts:UpdateDragFeedback(ui)
         frame.coreLine:Hide()
     end
 
-    -- Restore the old held-callout preview semantics, but keep the presentation
-    -- cursor-attached. The text is the resolved chat preview (for example
-    -- "INC BS"), and the existing context state updates it to "INC BS 3" as
-    -- soon as the corresponding edge is crossed.
     local previewText = ""
     if type(self.GetCalloutPreviewText) == "function" then
         previewText = tostring(self:GetCalloutPreviewText(ui.pressActionKey, ui.node, contextText) or "")
@@ -224,7 +255,7 @@ function Callouts:UpdateDragFeedback(ui)
         frame.previewText:ClearAllPoints()
         frame.previewText:SetPoint("BOTTOM", frame.cursorAnchor, "TOP", 0, CURSOR_PREVIEW_OFFSET_Y)
         frame.previewText:SetText(previewText)
-        frame.previewText:SetTextColor(1, 1, 1, 1)
+        frame.previewText:SetTextColor(r, g, b, 1)
         frame.previewText:Show()
     else
         frame.previewText:Hide()
@@ -238,12 +269,9 @@ function Callouts:ActivateDragFeedback(ui)
         return
     end
 
-    -- A tether exists to communicate that this callout has directional
-    -- destinations. If none of its four directions contain context text, do
-    -- not draw one at all. Cursor preview remains independently available.
     local showTether = settings.showDragTether ~= false
         and HasAnyConfiguredContext(ui.pressActionKey)
-    local showPreview = settings.showDragPreview ~= false
+    local showPreview = self:GetPreviewMode() == "CURSOR"
     if not showTether and not showPreview then
         self:HideDragFeedback()
         return
@@ -262,6 +290,8 @@ function Callouts:RefreshDragFeedbackSettings()
     local frame = self.dragFeedbackFrame
     if frame and frame.activeUI and frame.activeUI.pressActive == true then
         self:ActivateDragFeedback(frame.activeUI)
+    elseif frame and self:GetPreviewMode() ~= "CURSOR" then
+        if frame.previewText then frame.previewText:Hide() end
     end
 end
 
