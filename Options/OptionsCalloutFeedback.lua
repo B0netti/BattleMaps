@@ -5,6 +5,7 @@ if not Options or not Options.Widgets or not Callouts then return end
 
 local W = Options.Widgets
 local MakeCheckbox = W.MakeCheckbox
+local MakeDropdown = W.MakeDropdown
 local SetControlEnabled = W.SetControlEnabled
 local AddControlTooltip = W.AddControlTooltip
 
@@ -36,8 +37,6 @@ function Options:CreateCalloutsPage(parent)
         Reanchor(self.calloutIconSizeSlider, iconsPanel, 12, -30)
     end
 
-    -- Use the space freed by the retired X/Y sliders for the gesture-feedback
-    -- controls. Two rows keep the labels readable without enlarging the panel.
     Reanchor(self.calloutDragContextCheck, iconsPanel, 190, -34)
 
     self.calloutDragTetherCheck = MakeCheckbox(iconsPanel, "Glow tether", 382, -34,
@@ -49,31 +48,25 @@ function Options:CreateCalloutsPage(parent)
     AddControlTooltip(self.calloutDragTetherCheck, "Glow tether",
         "Draws a glowing line from the pressed objective to the cursor. It fades in with drag distance and becomes thicker only when a configured edge context is active. Callouts with no configured edge contexts do not draw a tether.")
 
-    self.calloutDragPreviewCheck = MakeCheckbox(iconsPanel, "Cursor preview", 190, -79,
-        function() return Callouts:GetSettings().showDragPreview ~= false end,
-        function(value)
-            Callouts:GetSettings().showDragPreview = value == true
-            if Callouts.RefreshDragFeedbackSettings then Callouts:RefreshDragFeedbackSettings() end
-        end)
-    AddControlTooltip(self.calloutDragPreviewCheck, "Cursor preview",
-        "Shows the full held callout preview about 18 pixels above the cursor. The preview updates live when a configured edge context is triggered, for example INC BS becoming INC BS 3.")
-
-    self.calloutCenterPreviewCheck = MakeCheckbox(iconsPanel, "Center-screen preview", 382, -79,
-        function() return Callouts:GetSettings().showCenterPreview == true end,
-        function(value)
-            Callouts:GetSettings().showCenterPreview = value == true
-            if Callouts.RefreshCenterPreviewSettings then Callouts:RefreshCenterPreviewSettings() end
-        end)
-    AddControlTooltip(self.calloutCenterPreviewCheck, "Center-screen preview",
-        "Shows the same held callout preview near the center of the screen using Blizzard's native large UI font styling. This does not write into RaidWarningFrame, avoiding the raid-warning taint path.")
+    self.calloutPreviewModeDropdown = MakeDropdown(iconsPanel, "Preview", 190, -72, 360, {
+        { value = "OFF", label = "Disabled" },
+        { value = "CURSOR", label = "At cursor" },
+        { value = "CENTER", label = "Center screen" },
+        { value = "NOTIFICATIONS", label = "Same as Notifications" },
+    }, function()
+        return Callouts:GetPreviewMode()
+    end, function(value)
+        Callouts:SetPreviewMode(value)
+    end, true)
+    AddControlTooltip(self.calloutPreviewModeDropdown, "Callout preview",
+        "Chooses one place to show the held callout text. At cursor follows the pointer; Center screen uses Blizzard-style large text; Same as Notifications uses the configured BattleMaps notification position, attachment, width, scale, and alignment. Preview text uses the active callout's color.")
 
     local stateRefresher = CreateFrame("Frame", nil, page)
     stateRefresher.Refresh = function()
         local settings = Callouts:GetSettings()
         local enabled = settings.enabled ~= false and settings.dragContextEnabled ~= false
         SetControlEnabled(self.calloutDragTetherCheck, enabled)
-        SetControlEnabled(self.calloutDragPreviewCheck, enabled)
-        SetControlEnabled(self.calloutCenterPreviewCheck, enabled)
+        SetControlEnabled(self.calloutPreviewModeDropdown, enabled)
     end
     self.refreshers[#self.refreshers + 1] = stateRefresher
     stateRefresher:Refresh()
