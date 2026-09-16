@@ -50,6 +50,7 @@ Options\OptionsBases.lua
 Options\OptionsCarts.lua
 Options\OptionsCallouts.lua
 Options\OptionsCalloutFeedback.lua
+Options\OptionsCalloutEditorPolish.lua
 Options\OptionsFlags.lua
 Options\OptionsNotifications.lua
 Options\OptionsPolish.lua
