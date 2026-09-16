@@ -8,6 +8,9 @@ PROJECT_STATUS.md
 # Local diagnostics and release artifacts
 *.log
 *.zip
+release-output/
+release-output-a/
+release-output-b/
 
 # Temporary and editor backup files
 *.tmp
