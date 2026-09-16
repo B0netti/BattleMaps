@@ -166,7 +166,12 @@ function Callouts:EnsureDragFeedbackOverlay()
     return frame
 end
 
-function Callouts:HideDragFeedback()
+-- Hide only the tether/cursor-feedback layer. This deliberately does not call
+-- the public HideDragFeedback method because later preview modules wrap that
+-- method to also hide centre/notification previews. During an active press we
+-- may have no tether and no cursor preview while still needing a selected
+-- preview mode (especially Same as Notifications) to remain continuously shown.
+local function HideDragFeedbackVisualsOnly(self)
     local frame = self.dragFeedbackFrame
     if not frame then return end
     frame.activeUI = nil
@@ -176,6 +181,10 @@ function Callouts:HideDragFeedback()
     if frame.glowLine then frame.glowLine:Hide() end
     if frame.previewText then frame.previewText:Hide() end
     frame:Hide()
+end
+
+function Callouts:HideDragFeedback()
+    HideDragFeedbackVisualsOnly(self)
 end
 
 function Callouts:UpdateDragFeedback(ui)
@@ -273,7 +282,10 @@ function Callouts:ActivateDragFeedback(ui)
         and HasAnyConfiguredContext(ui.pressActionKey)
     local showPreview = self:GetPreviewMode() == "CURSOR"
     if not showTether and not showPreview then
-        self:HideDragFeedback()
+        -- The press is still active; only this module has nothing to draw.
+        -- Do not invoke the public cleanup path here, because Same as
+        -- Notifications / Center screen may still be the selected preview.
+        HideDragFeedbackVisualsOnly(self)
         return
     end
 
