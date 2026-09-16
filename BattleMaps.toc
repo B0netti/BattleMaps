@@ -41,6 +41,7 @@ Objectives\ObjectivePins.lua
 Objectives\Callouts.lua
 Objectives\CalloutDragPolicy.lua
 Objectives\CalloutHeldVisualStability.lua
+Objectives\CalloutEnvironmentPolicy.lua
 Objectives\CalloutFeedback.lua
 Objectives\CalloutCenterPreview.lua
 Options\Options.lua
