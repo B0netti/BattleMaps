@@ -193,12 +193,20 @@ function Callouts:UpdateDragFeedback(ui)
         frame.coreLine:Hide()
     end
 
+    -- Restore the old held-callout preview semantics, but keep the presentation
+    -- cursor-attached. The text is the resolved chat preview (for example
+    -- "INC BS"), and the existing context state updates it to "INC BS 3" as
+    -- soon as the corresponding edge is crossed.
     local contextText = tostring(ui.dragContextText or "")
-    if frame.showPreview and activeContext and contextText ~= "" then
+    local previewText = ""
+    if type(self.GetCalloutPreviewText) == "function" then
+        previewText = tostring(self:GetCalloutPreviewText(ui.pressActionKey, ui.node, contextText) or "")
+    end
+    if frame.showPreview and previewText ~= "" then
         frame.previewText:ClearAllPoints()
         frame.previewText:SetPoint("BOTTOM", frame.cursorAnchor, "TOP", 0, CURSOR_PREVIEW_OFFSET_Y)
-        frame.previewText:SetText(contextText)
-        frame.previewText:SetTextColor(r, g, b, 1)
+        frame.previewText:SetText(previewText)
+        frame.previewText:SetTextColor(1, 1, 1, 1)
         frame.previewText:Show()
     else
         frame.previewText:Hide()
