@@ -21,6 +21,13 @@ local function GetPreviewColor(ui)
     return 1, 1, 1
 end
 
+local function IsPreviewArmed(ui)
+    if type(Callouts.IsHeldPreviewArmed) == "function" then
+        return Callouts:IsHeldPreviewArmed(ui)
+    end
+    return ui and ui.pressActive == true
+end
+
 function Callouts:EnsureCenterPreviewFrame()
     if self.centerPreviewFrame then return self.centerPreviewFrame end
     if not UIParent then return nil end
@@ -49,8 +56,7 @@ function Callouts:EnsureCenterPreviewFrame()
         local ui = frame.activeUI
         if Callouts:GetPreviewMode() ~= "CENTER"
             or Callouts:GetSettings().dragContextEnabled == false
-            or not ui
-            or ui.pressActive ~= true then
+            or not IsPreviewArmed(ui) then
             Callouts:HideCenterPreview()
             return
         end
@@ -73,8 +79,7 @@ end
 function Callouts:ShowCenterPreview(ui)
     if self:GetPreviewMode() ~= "CENTER"
         or self:GetSettings().dragContextEnabled == false
-        or not ui
-        or ui.pressActive ~= true then
+        or not IsPreviewArmed(ui) then
         self:HideCenterPreview()
         return
     end
@@ -153,8 +158,7 @@ function Callouts:EnsureNotificationPreviewFrame()
         local ui = frame.activeUI
         if Callouts:GetPreviewMode() ~= "NOTIFICATIONS"
             or Callouts:GetSettings().dragContextEnabled == false
-            or not ui
-            or ui.pressActive ~= true then
+            or not IsPreviewArmed(ui) then
             Callouts:HideNotificationPreview()
             return
         end
@@ -182,8 +186,7 @@ end
 function Callouts:ShowNotificationPreview(ui)
     if self:GetPreviewMode() ~= "NOTIFICATIONS"
         or self:GetSettings().dragContextEnabled == false
-        or not ui
-        or ui.pressActive ~= true then
+        or not IsPreviewArmed(ui) then
         self:HideNotificationPreview()
         return
     end
@@ -203,6 +206,11 @@ function Callouts:HideNotificationPreview()
 end
 
 function Callouts:ShowSelectedPreview(ui)
+    if not IsPreviewArmed(ui) then
+        self:HideSelectedPreview()
+        return
+    end
+
     local mode = self:GetPreviewMode()
     if mode == "CENTER" then
         self:HideNotificationPreview()
@@ -227,7 +235,7 @@ function Callouts:RefreshSelectedPreviewSettings()
         or (self.dragFeedbackFrame and self.dragFeedbackFrame.activeUI)
 
     self:HideSelectedPreview()
-    if ui and ui.pressActive == true then
+    if IsPreviewArmed(ui) then
         self:ShowSelectedPreview(ui)
     end
 end
@@ -240,7 +248,7 @@ local OriginalActivateDragFeedback = Callouts.ActivateDragFeedback
 if type(OriginalActivateDragFeedback) == "function" then
     function Callouts:ActivateDragFeedback(ui)
         OriginalActivateDragFeedback(self, ui)
-        if ui and ui.pressActive == true then
+        if IsPreviewArmed(ui) then
             self:ShowSelectedPreview(ui)
         else
             self:HideSelectedPreview()
