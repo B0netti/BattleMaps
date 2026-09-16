@@ -14,16 +14,17 @@ local BORDER_STYLE_OPTIONS = Options.Constants.BORDER_STYLE_OPTIONS
 
 function Options:CreateGeneralPage(parent)
     local db = BattleMaps.Database:Get()
-    local appearanceHeight = 310
+    local appearanceHeight = 330
+    local fullControlWidth = 310
     local page = CreateFrame("Frame", nil, parent)
     self.pages.general = page
     page:SetAllPoints(parent)
 
     local behaviour = MakePanel(page, "Options", 0, -8, 334, 184)
-    MakeCheckbox(behaviour, "Show automatically in battlegrounds", 10, -34,
+    MakeCheckbox(behaviour, "Show in BG", 10, -34,
         function() return db.autoShow end,
         function(value) db.autoShow = value end)
-    MakeCheckbox(behaviour, "Hide automatically after leaving", 10, -64,
+    MakeCheckbox(behaviour, "Hide after leaving", 10, -64,
         function() return db.autoHide end,
         function(value) db.autoHide = value end)
     MakeCheckbox(behaviour, "Show login message", 10, -94,
@@ -106,7 +107,6 @@ function Options:CreateGeneralPage(parent)
     end
     self.refreshers[#self.refreshers + 1] = battlegroundUI
 
-
     local fullMap = MakePanel(page, "World map", 350, -(appearanceHeight + 24), 334, 156)
     self.worldMapIntegrationCheck = MakeCheckbox(fullMap, "Enable BattleMaps on the full-screen map", 10, -34,
         function() return db.enableWorldMapIntegration ~= false end,
@@ -131,7 +131,8 @@ function Options:CreateGeneralPage(parent)
                 mapFrame:LayoutView()
             end
         end,
-        function(value) return string.format("%d%%", math.floor((value * 100) + 0.5)) end)
+        function(value) return string.format("%d%%", math.floor((value * 100) + 0.5)) end,
+        fullControlWidth)
     AddControlTooltip(self.worldMapPinScale, "Full-screen pin and effect scale",
         "Scales player, teammate, objective, timer, trail, pulse, and carried-objective visuals only on the full-screen map. Floating-map sizes are unchanged.")
 
@@ -142,7 +143,27 @@ function Options:CreateGeneralPage(parent)
     self.refreshers[#self.refreshers + 1] = fullMap
 
     local appearance = MakePanel(page, "Map frame", 350, -8, 334, appearanceHeight)
-    self.factionSwapAlertCheck = MakeCheckbox(appearance, "Faction swap alert", 10, -30,
+
+    self.showMapHeaderCheck = MakeCheckbox(appearance, "Show map header on hover", 10, -30,
+        function()
+            local mapFrame = BattleMaps.MapFrame
+            if mapFrame and mapFrame.IsMapHeaderEnabled then
+                return mapFrame:IsMapHeaderEnabled()
+            end
+            return db.showMapHeader ~= false
+        end,
+        function(value)
+            local mapFrame = BattleMaps.MapFrame
+            if mapFrame and mapFrame.SetMapHeaderEnabled then
+                mapFrame:SetMapHeaderEnabled(value == true)
+            else
+                db.showMapHeader = value == true
+            end
+        end)
+    AddControlTooltip(self.showMapHeaderCheck, "Map header",
+        "Shows the BattleMaps banner, battleground name, Lock control, and Close button when hovering the floating map. Disable it for a map-only presentation. The header is still forced visible while the layout is unlocked, and it can be shown again from the map's right-click menu.")
+
+    self.factionSwapAlertCheck = MakeCheckbox(appearance, "Faction swap alert", 10, -60,
         function() return db.factionSwapAlert ~= false end,
         function(value)
             db.factionSwapAlert = value
@@ -152,7 +173,7 @@ function Options:CreateGeneralPage(parent)
     AddControlTooltip(self.factionSwapAlertCheck, "Faction swap alert",
         "Colours the map border only when the battleground assigns you to the opposite faction.")
 
-    self.borderStyleDropdown = MakeDropdown(appearance, "Border style", 12, -58, 250, BORDER_STYLE_OPTIONS,
+    self.borderStyleDropdown = MakeDropdown(appearance, "Border style", 12, -88, 250, BORDER_STYLE_OPTIONS,
         function() return db.frameBorderStyle or "solid" end,
         function(value)
             db.frameBorderStyle = value == "tooltip" and "tooltip"
@@ -162,27 +183,29 @@ function Options:CreateGeneralPage(parent)
         end,
         true)
 
-    MakeSlider(appearance, "Border thickness", 12, -106, 0, 8, 1,
+    MakeSlider(appearance, "Border thickness", 12, -136, 0, 8, 1,
         function() return tonumber(db.frameBorderSize) or 2 end,
         function(value)
             db.frameBorderSize = value
             BattleMaps.MapFrame:ApplyVisualSettings()
         end,
-        function(value) return value == 0 and "Off" or string.format("%d px", value) end)
+        function(value) return value == 0 and "Off" or string.format("%d px", value) end,
+        fullControlWidth)
 
-    MakeSlider(appearance, "Border strength", 12, -154, 0.15, 1.00, 0.05,
+    MakeSlider(appearance, "Border strength", 12, -184, 0.15, 1.00, 0.05,
         function() return tonumber(db.frameBorderStrength) or 1 end,
         function(value)
             db.frameBorderStrength = value
             BattleMaps.MapFrame:UpdateBorder()
         end,
-        function(value) return string.format("%d%%", math.floor((value * 100) + 0.5)) end)
+        function(value) return string.format("%d%%", math.floor((value * 100) + 0.5)) end,
+        fullControlWidth)
 
     self.mapTextureAlphaSlider = MakeSlider(
         appearance,
         "Map texture opacity",
         12,
-        -202,
+        -232,
         0.20,
         1.00,
         0.05,
@@ -191,21 +214,22 @@ function Options:CreateGeneralPage(parent)
             db.mapTextureAlpha = value
             BattleMaps.MapFrame:ApplyVisualSettings()
         end,
-        function(value) return string.format("%d%%", math.floor((value * 100) + 0.5)) end
+        function(value) return string.format("%d%%", math.floor((value * 100) + 0.5)) end,
+        fullControlWidth
     )
 
     self.frameBackgroundColorControl = MakeColorSwatchControl(
         appearance,
         "Frame background",
         12,
-        -250,
+        -280,
         function()
             local color = db.frameBackgroundColor
             return type(color) == "table" and color
                 or { r = 0.015, g = 0.015, b = 0.015, a = 0.12 }
         end,
         function() self:OpenFrameBackgroundColorPicker() end,
-        304
+        fullControlWidth
     )
     AddControlTooltip(self.frameBackgroundColorControl, "Frame background",
         "Sets the color behind the map artwork. The color picker's opacity control changes the background opacity independently of Map texture opacity.")
