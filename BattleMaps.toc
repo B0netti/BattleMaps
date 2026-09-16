@@ -39,6 +39,7 @@ Objectives\PreviewPins.lua
 Objectives\CarriedObjectives.lua
 Objectives\ObjectivePins.lua
 Objectives\Callouts.lua
+Objectives\CalloutDragPolicy.lua
 Objectives\CalloutFeedback.lua
 Objectives\CalloutCenterPreview.lua
 Options\Options.lua
