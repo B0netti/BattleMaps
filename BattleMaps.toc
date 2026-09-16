@@ -29,6 +29,7 @@ Integrations\AuraLayout.lua
 Objectives\ObjectiveRules.lua
 Map\MapRenderer.lua
 Map\MapFrame.lua
+Map\MapHeader.lua
 Map\WorldMapIntegration.lua
 Pins\Pins.lua
 Pins\UnitPins.lua
@@ -42,6 +43,7 @@ Objectives\CalloutFeedback.lua
 Options\Options.lua
 Options\OptionsWidgets.lua
 Options\OptionsGeneral.lua
+Options\OptionsGeneralPolish.lua
 Options\OptionsElvUI.lua
 Options\OptionsUnits.lua
 Options\OptionsBases.lua
