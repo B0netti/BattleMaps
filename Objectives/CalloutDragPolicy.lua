@@ -160,7 +160,7 @@ if type(OriginalCreateNodeUI) == "function" then
 
             local suffix = button == "LeftButton" and "1" or button == "RightButton" and "2" or button == "MiddleButton" and "3" or nil
             if not suffix then return end
-            local prefix = SecureCmdOptionParse("[mod:alt,ctrl,shift] alt-ctrl-shift-; [mod:alt,ctrl] alt-ctrl-; [mod:alt,shift] alt-shift-; [mod:ctrl,shift] ctrl-shift-; [mod:alt] alt-; [mod:ctrl] ctrl-; [mod:shift] shift-; [] none") or "none"
+            local prefix = SecureCmdOptionParse("[mod:alt,mod:ctrl,mod:shift] alt-ctrl-shift-; [mod:alt,mod:ctrl] alt-ctrl-; [mod:alt,mod:shift] alt-shift-; [mod:ctrl,mod:shift] ctrl-shift-; [mod:alt] alt-; [mod:ctrl] ctrl-; [mod:shift] shift-; [] none") or "none"
             if prefix == "none" then prefix = "" end
             local attr = prefix .. "macrotext" .. suffix
             local zone = self:GetAttribute("drag-selected-zone")

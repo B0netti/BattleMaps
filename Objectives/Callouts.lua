@@ -1416,7 +1416,7 @@ function Callouts:CreateNodeUI(node, index)
         if self:GetAttribute("drag-enabled") ~= 1 then return end
         local suffix = button == "LeftButton" and "1" or button == "RightButton" and "2" or button == "MiddleButton" and "3" or nil
         if not suffix then return end
-        local prefix = SecureCmdOptionParse("[mod:alt,ctrl,shift] alt-ctrl-shift-; [mod:alt,ctrl] alt-ctrl-; [mod:alt,shift] alt-shift-; [mod:ctrl,shift] ctrl-shift-; [mod:alt] alt-; [mod:ctrl] ctrl-; [mod:shift] shift-; [] none") or "none"
+        local prefix = SecureCmdOptionParse("[mod:alt,mod:ctrl,mod:shift] alt-ctrl-shift-; [mod:alt,mod:ctrl] alt-ctrl-; [mod:alt,mod:shift] alt-shift-; [mod:ctrl,mod:shift] ctrl-shift-; [mod:alt] alt-; [mod:ctrl] ctrl-; [mod:shift] shift-; [] none") or "none"
         if prefix == "none" then prefix = "" end
         local action = self:GetAttribute("drag-action-" .. prefix .. suffix)
         if not action or action == "" then return end
@@ -1444,7 +1444,7 @@ function Callouts:CreateNodeUI(node, index)
         if down then return end
         local suffix = button == "LeftButton" and "1" or button == "RightButton" and "2" or button == "MiddleButton" and "3" or nil
         if not suffix then return end
-        local prefix = SecureCmdOptionParse("[mod:alt,ctrl,shift] alt-ctrl-shift-; [mod:alt,ctrl] alt-ctrl-; [mod:alt,shift] alt-shift-; [mod:ctrl,shift] ctrl-shift-; [mod:alt] alt-; [mod:ctrl] ctrl-; [mod:shift] shift-; [] none") or "none"
+        local prefix = SecureCmdOptionParse("[mod:alt,mod:ctrl,mod:shift] alt-ctrl-shift-; [mod:alt,mod:ctrl] alt-ctrl-; [mod:alt,mod:shift] alt-shift-; [mod:ctrl,mod:shift] ctrl-shift-; [mod:alt] alt-; [mod:ctrl] ctrl-; [mod:shift] shift-; [] none") or "none"
         if prefix == "none" then prefix = "" end
         local attr = prefix .. "macrotext" .. suffix
         local macro = self:GetAttribute("drag-base-" .. attr) or ""
@@ -1491,7 +1491,7 @@ function Callouts:CreateNodeUI(node, index)
     button:WrapScript(button, "PostClick", [[
         local suffix = button == "LeftButton" and "1" or button == "RightButton" and "2" or button == "MiddleButton" and "3" or nil
         if suffix then
-            local prefix = SecureCmdOptionParse("[mod:alt,ctrl,shift] alt-ctrl-shift-; [mod:alt,ctrl] alt-ctrl-; [mod:alt,shift] alt-shift-; [mod:ctrl,shift] ctrl-shift-; [mod:alt] alt-; [mod:ctrl] ctrl-; [mod:shift] shift-; [] none") or "none"
+            local prefix = SecureCmdOptionParse("[mod:alt,mod:ctrl,mod:shift] alt-ctrl-shift-; [mod:alt,mod:ctrl] alt-ctrl-; [mod:alt,mod:shift] alt-shift-; [mod:ctrl,mod:shift] ctrl-shift-; [mod:alt] alt-; [mod:ctrl] ctrl-; [mod:shift] shift-; [] none") or "none"
             if prefix == "none" then prefix = "" end
             local attr = prefix .. "macrotext" .. suffix
             local base = self:GetAttribute("drag-base-" .. attr)
