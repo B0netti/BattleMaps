@@ -35,7 +35,7 @@ function Options:CreateCalloutsPage(parent)
             if Callouts.RefreshDragFeedbackSettings then Callouts:RefreshDragFeedbackSettings() end
         end)
     AddControlTooltip(self.calloutDragPreviewCheck, "Cursor preview",
-        "Shows the active edge-context string about 18 pixels above the cursor while a callout drag is inside a valid context.")
+        "Shows the full held callout preview about 18 pixels above the cursor. The preview updates live when an edge context is triggered, for example INC BS becoming INC BS 3.")
 
     local stateRefresher = CreateFrame("Frame", nil, page)
     stateRefresher.Refresh = function()
