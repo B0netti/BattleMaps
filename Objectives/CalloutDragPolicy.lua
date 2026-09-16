@@ -18,6 +18,8 @@ local MODE_SECURE_PREFIX = {
     ALT_CTRL_SHIFT = "alt-ctrl-shift-",
 }
 
+local CONTEXT_KEYS = { "TOP", "RIGHT", "BOTTOM", "LEFT" }
+
 local function HasText(value)
     return tostring(value or ""):match("%S") ~= nil
 end
@@ -26,7 +28,7 @@ function Callouts:HasConfiguredDragContext(actionKey)
     if not actionKey or type(self.GetActionContexts) ~= "function" then return false end
     local contexts = self:GetActionContexts(actionKey)
     if type(contexts) ~= "table" then return false end
-    for _, key in ipairs({ "TOP", "RIGHT", "BOTTOM", "LEFT" }) do
+    for _, key in ipairs(CONTEXT_KEYS) do
         if HasText(contexts[key]) then return true end
     end
     return false
@@ -46,22 +48,31 @@ function Callouts:IsHeldPreviewArmed(ui)
     return ui.pressInside == true
 end
 
--- The secure mouse-down snippet expands the protected button to $screen only
--- when drag-action-* contains an action. Clear that marker for 0/4 callouts so
--- the button retains its ordinary node-sized hit area and native click-cancel
--- semantics throughout combat as well.
+-- Build secure drag policy per callout. 0/4 actions never expand the protected
+-- button. For 1-4 actions, empty directions are represented by an empty macro
+-- rather than silently falling back to the base callout.
 local OriginalBuildCallouts = Callouts.BuildCallouts
 if type(OriginalBuildCallouts) == "function" then
     function Callouts:BuildCallouts(node)
         local result = OriginalBuildCallouts(self, node)
         local settings = self:GetSettings()
+
         for _, actionKey in ipairs(self.ACTION_ORDER or {}) do
-            if not self:HasConfiguredDragContext(actionKey) then
-                local parts = self:GetBindingParts(settings.bindings and settings.bindings[actionKey])
-                local prefix = parts and MODE_SECURE_PREFIX[parts.mode]
-                local suffix = parts and parts.mouse and parts.mouse.suffix
-                if prefix ~= nil and suffix then
+            local parts = self:GetBindingParts(settings.bindings and settings.bindings[actionKey])
+            local prefix = parts and MODE_SECURE_PREFIX[parts.mode]
+            local suffix = parts and parts.mouse and parts.mouse.suffix
+            if prefix ~= nil and suffix then
+                local attr = prefix .. "macrotext" .. suffix
+                local contexts = self:GetActionContexts(actionKey) or {}
+
+                if not self:HasConfiguredDragContext(actionKey) then
                     result["drag-action-" .. prefix .. suffix] = ""
+                else
+                    for _, contextKey in ipairs(CONTEXT_KEYS) do
+                        if not HasText(contexts[contextKey]) then
+                            result["drag-" .. contextKey:lower() .. "-" .. attr] = ""
+                        end
+                    end
                 end
             end
         end
@@ -105,6 +116,25 @@ if type(OriginalSetBaseHoverSuppressed) == "function" then
     end
 end
 
+-- Suppress the confirmation animation when the secure release selected the
+-- explicit cancel outcome. The protected macro has already been blanked by
+-- PreClick; this keeps the visual feedback consistent with what was sent.
+local OriginalHandleSecureCalloutClick = Callouts.HandleSecureCalloutClick
+if type(OriginalHandleSecureCalloutClick) == "function" then
+    function Callouts:HandleSecureCalloutClick(ui, mouseButton)
+        local button = ui and ui.button
+        local cancelled = button and button.GetAttribute
+            and button:GetAttribute("drag-release-cancelled") == 1
+        if cancelled then
+            ui.suppressUntil = nil
+            self:SetBaseHoverSuppressed(ui, false)
+            self:HideChoiceVisuals(ui)
+            return
+        end
+        return OriginalHandleSecureCalloutClick(self, ui, mouseButton)
+    end
+end
+
 -- Track classic leave/re-enter explicitly. Setting pressOriginated=false on
 -- leave is the final guard against the existing PostClick path treating an
 -- off-node release as a deliberate drag commit. Re-entering while still held
@@ -115,6 +145,39 @@ if type(OriginalCreateNodeUI) == "function" then
         local ui = OriginalCreateNodeUI(self, node, index)
         local button = ui and ui.button
         if not button then return ui end
+
+        -- Core PreClick already distinguishes a stationary click from a
+        -- meaningful drag and records drag-selected-zone. This post-body turns
+        -- the third state into a real secure cancel:
+        --   nil  = no meaningful drag -> base click
+        --   ""   = meaningful drag but no crossed edge -> cancel
+        --   edge = crossed edge -> directional macro, unless that edge is blank
+        -- This runs inside the secure wrapper, so cancellation works in combat.
+        button:WrapScript(button, "PreClick", [[]], [[
+            if down then return end
+            self:SetAttribute("drag-release-cancelled", nil)
+            if self:GetAttribute("drag-expanded") ~= 1 then return end
+
+            local suffix = button == "LeftButton" and "1" or button == "RightButton" and "2" or button == "MiddleButton" and "3" or nil
+            if not suffix then return end
+            local prefix = SecureCmdOptionParse("[mod:alt,ctrl,shift] alt-ctrl-shift-; [mod:alt,ctrl] alt-ctrl-; [mod:alt,shift] alt-shift-; [mod:ctrl,shift] ctrl-shift-; [mod:alt] alt-; [mod:ctrl] ctrl-; [mod:shift] shift-; [] none") or "none"
+            if prefix == "none" then prefix = "" end
+            local attr = prefix .. "macrotext" .. suffix
+            local zone = self:GetAttribute("drag-selected-zone")
+
+            if zone == "" then
+                self:SetAttribute(attr, "")
+                self:SetAttribute("drag-release-cancelled", 1)
+                return
+            end
+
+            if zone and zone ~= "" then
+                local selectedMacro = self:GetAttribute(attr) or ""
+                if selectedMacro == "" then
+                    self:SetAttribute("drag-release-cancelled", 1)
+                end
+            end
+        ]])
 
         button:HookScript("OnLeave", function()
             if not ui.pressActive or self:IsDirectionalDragActive(ui.pressActionKey) then return end
